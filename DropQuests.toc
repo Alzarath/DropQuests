@@ -1,0 +1,38 @@
+## Interface: 90100
+## Title: DropQuests
+## Notes: Custom quests to keep track of resources
+## Author: Alzarath
+## Version: 0.0.1
+## DefaultState: enabled
+## X-Category: Map
+## X-eMail: artanis186 @ gmail DOT com
+## OptionalDeps: Ace3
+## X-Curse-Project-ID: 14154
+## X-WoWI-ID: 15716
+
+## LoadManagers: AddonLoader
+## X-LoadOn-Always: delayed
+
+## SavedVariablesPerCharacter: DropQuestsDB
+
+# Library files
+#@no-lib-strip@
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+Libs\AceAddon-3.0\AceAddon-3.0.xml
+Libs\AceEvent-3.0\AceEvent-3.0.xml
+Libs\AceDB-3.0\AceDB-3.0.xml
+Libs\AceDBOptions-3.0\AceDBOptions-3.0.xml
+Libs\AceLocale-3.0\AceLocale-3.0.xml
+Libs\AceGUI-3.0\AceGUI-3.0.xml
+Libs\AceConsole-3.0\AceConsole-3.0.xml
+Libs\AceConfig-3.0\AceConfig-3.0.xml
+Libs\HereBeDragons\HereBeDragons-2.0.lua
+#@end-no-lib-strip@
+
+# Locale files
+Locales\Locale-enUS.lua
+
+# Core files
+DropQuests.lua
+DropQuests.xml
