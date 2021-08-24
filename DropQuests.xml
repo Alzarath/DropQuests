@@ -9,4 +9,13 @@
 			</Layer>
 		</Layers>
     </Frame>-->
+	<GameTooltip name="DQTooltip" inherits="GameTooltipTemplate">
+		<Anchors>
+			<Anchor point="TOPLEFT" relativeTo="GameTooltip" relativePoint="TOPRIGHT">
+				<Offset>
+					<AbsDimension x="5" y="0"/>
+				</Offset>
+			</Anchor>
+		</Anchors>
+	</GameTooltip>
 </Ui>
