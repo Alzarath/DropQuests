@@ -1,0 +1,12 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/
+..\FrameXML\UI.xsd">
+	<GameTooltip name="DQTooltip" inherits="GameTooltipTemplate">
+		<Anchors>
+			<Anchor point="TOPLEFT" relativeTo="GameTooltip" relativePoint="TOPRIGHT">
+				<Offset>
+					<AbsDimension x="5" y="0"/>
+				</Offset>
+			</Anchor>
+		</Anchors>
+	</GameTooltip>
+</Ui>
