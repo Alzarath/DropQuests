@@ -15,9 +15,11 @@ local HBD = LibStub("HereBeDragons-2.0")
 ---------------------------------------------------------
 -- Addon declaration
 local addonName = "DropQuests"
+local addonDisplayName = "|cff9933"..addonName.."|r"
 DropQuests = ACE:NewAddon(addonName, "AceConsole-3.0", "AceEvent-3.0")
 local DropQuests = DropQuests
 local L = LibStub("AceLocale-3.0"):GetLocale(addonName, false)
+local DB_VERSION = 1
 
 ---------------------------------------------------------
 -- Variable declaration
@@ -84,6 +86,29 @@ local function addQuestToSlot(slot_number)
 	initializeQuestVars(slot_number)
 
 	ACR:RegisterOptionsTable(addonName, options, nil)
+end
+
+function refreshOptions(self)
+	options = copy(default_options)
+
+	for key, value in pairs(questVars) do
+		hideQuestFrame(key)
+	end
+
+	questVars = {}
+
+	-- Initialize quest options from database
+	for key, value in pairs(db.questList) do
+		initializeQuestSlotOptions(key)
+		local questOptions = options.args.general.args.quests.args[key]
+
+		questOptions.name = getQuestName(key) or "New Quest"
+		initializeQuestVars(key)
+	end
+
+	-- Get the option table for profiles
+	options.args.profiles = ACO:GetOptionsTable(self.db)
+	options.args.profiles.name = L["Profiles"]
 end
 
 function initializeQuestSlotOptions(slot_number)
@@ -176,10 +201,6 @@ function initializeDatabaseWithQuest(slot_number)
 	db.questList[slot_number].disabled = false
 end
 
-local function getOptionTable(slot_number)
-	return options.args.general.args.quests[slot_number]
-end
-
 function copy(obj, seen)
 	if type(obj) ~= 'table' then return obj end
 	if seen and seen[obj] then return seen[obj] end
@@ -203,26 +224,7 @@ local function setQuestItem(slot_number, itemID)
 		db.questList[slot_number].itemIcon = GetItemIcon(itemID)
 	end
 
-	if db.questList[slot_number].name == nil then
-		local item_name = getQuestName(slot_number)
-
-		if item_name == nil then
-			if quest_type == "item" then
-				local item = Item:CreateFromItemID(itemID)
-
-				item:ContinueOnItemLoad(function()
-					item_name = item:GetItemName()
-					db.questList[slot_number].name = item_name
-					options.args.general.args.quests.args[slot_number].name = item_name
-					ACR:NotifyChange(addonName)
-				end)
-			end
-		else
-			db.questList[slot_number].name = item_name
-			options.args.general.args.quests.args[slot_number].name = item_name
-			ACR:NotifyChange(addonName)
-		end
-	end
+	ACR:NotifyChange(addonName)
 end
 
 ---------------------------------------------------------
@@ -365,7 +367,6 @@ function createQuestFrame(slot_number)
 			return nil
 		end
 
-
 		if getQuestType(slot_number) == "currency" then
 			local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(db.questList[slot_number].itemID)
 			frame.button:Reset()
@@ -373,6 +374,12 @@ function createQuestFrame(slot_number)
 		else
 			frame.button:SetItem(db.questList[slot_number].itemID)
 		end
+
+		if db.questList[slot_number].name == nil then
+			frame:UpdateName()
+		end
+
+		frame:UpdateQuestProgress()
 
 		return db.questList[slot_number].itemID
 	end
@@ -480,20 +487,15 @@ function createQuestFrame(slot_number)
 			frame.progress_text:SetText(textOutput)
 		end
 
+		questVars[slot_number].complete = itemCount >= itemGoal
+
 		-- Adjust color depending on completion.
-		if (questVars[slot_number].complete == false) then
-			if itemCount >= itemGoal then
-				questVars[slot_number].complete = true
-				frame.StatusBar:SetStatusBarColor(0.0, 1.0, 0.0)
-			else
-				local itemRatio = itemCount / max(itemGoal, 1)
-				frame.StatusBar:SetStatusBarColor(0.5 + (itemRatio * 0.5), 0.5 + (itemRatio * 0.5), 0.5 - (itemRatio * 0.5))
-			end
-		elseif (questVars[slot_number].complete == true and itemCount < itemGoal) then
+		if (questVars[slot_number].complete == true) then
+			frame.StatusBar:SetStatusBarColor(0.0, 1.0, 0.0)
+		else
 			local itemRatio = itemCount / max(itemGoal, 1)
 
 			frame.StatusBar:SetStatusBarColor(0.5 + (itemRatio * 0.5), 0.5 + (itemRatio * 0.5), 0.5 - (itemRatio * 0.5))
-			questVars[slot_number].complete = false
 		end
 	end
 
@@ -514,6 +516,14 @@ function createQuestFrame(slot_number)
 		--frame.StatusBar:SetSize(frame.StatusBar:GetWidth(), show_name and 16 or 16 * 2 + padding)
 
 		frame:UpdateQuestProgress()
+	end
+
+	function frame:UpdateVisibility(uiMapID)
+		if questVisibilityCheck(slot_number, uiMapID) then
+			showQuestFrame(slot_number)
+		else
+			hideQuestFrame(slot_number)
+		end
 	end
 
 	frame:Hide()
@@ -551,7 +561,8 @@ function hideQuestFrame(slot_number)
 end
 
 function addZoneToFilterList(slot_number, uiMapID)
-	uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
+	local frame = getFrameFromSlot(key)
+	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
 
 	local zone = getZoneFromMap(uiMapID)
 
@@ -563,13 +574,14 @@ function addZoneToFilterList(slot_number, uiMapID)
 	end
 	db.questList[slot_number].filter.zones[tostring(zone)] = true
 
-	refreshQuestFrameVisibility(tostring(zone))
+	frame:UpdateVisibility(tostring(continent))
 
 	return zone
 end
 
 function addContinentToFilterList(slot_number, uiMapID)
-	uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
+	local frame = getFrameFromSlot(key)
+	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
 
 	local continent = getContinentFromMap(uiMapID)
 
@@ -581,7 +593,7 @@ function addContinentToFilterList(slot_number, uiMapID)
 	end
 	db.questList[slot_number].filter.continents[tostring(continent)] = true
 
-	refreshQuestFrameVisibility(tostring(continent))
+	frame:UpdateVisibility(tostring(continent))
 
 	return continent
 end
@@ -683,21 +695,24 @@ function refreshQuestFrameVisibility(uiMapID)
 	if uiMapID == nil then return false end
 
 	for key, quest in pairs(db.questList) do
-		getFrameFromSlot(key):FullRefresh()
-		if questVisibilityCheck(key, uiMapID) then
-			showQuestFrame(key)
-		else
-			hideQuestFrame(key)
-		end
+		local frame = getFrameFromSlot(key)
+		frame:UpdateVisibility(uiMapID)
 	end
 
 	return true
 end
 
+function migrateDB(migrate_version)
+	print(addonDisplayName..":", "Migrating database from DB", "v"..migrate_version, "to", "v"..DB_VERSION)
+	db.version = DB_VERSION
+end
+
 ---------------------------------------------------------
 -- Options table
 
-options = {
+options = {}
+
+default_options = {
 	type = "group",
 	name = L[addonName],
 	desc = L[addonName],
@@ -871,6 +886,8 @@ quest_template = {
 						local new_name = getQuestName(info[3])
 
 						options.args.general.args.quests.args[info[3]].name = new_name or "New Quest"
+
+						ACR:NotifyChange(addonName)
 						return new_name or ""
 					end,
 					set = function(info, v)
@@ -1055,6 +1072,7 @@ quest_template = {
 					},
 					get = function(info) return db.questList[info[3]].appearance and db.questList[info[3]].appearance.display_type or "default" end,
 					set = function(info, v)
+						local frame = getFrameFromSlot(info[3])
 						if not db.questList[info[3]].appearance then
 							db.questList[info[3]].appearance = {}
 						end
@@ -1064,7 +1082,7 @@ quest_template = {
 						else
 							db.questList[info[3]].appearance.display_type = v
 						end
-						getFrameFromSlot(info[3]):UpdateQuestProgress()
+						frame:UpdateItem()
 					end,
 				},
 				x_offset = {
@@ -1342,6 +1360,7 @@ quest_template = {
 							disabled = function(info) return db.questList[info[3]].filter == nil or db.questList[info[3]].filter.continents == nil or db.questList[info[3]].filter.continents[tostring(getContinentFromMap())] ~= true end,
 							func = function(info, v)
 								local currentMap = getContinentFromMap()
+								local frame = getFrameFromSlot(info[3])
 
 								if db.questList[info[3]].filter == nil then
 									return
@@ -1352,7 +1371,7 @@ quest_template = {
 
 								db.questList[info[3]].filter.continents[tostring(currentMap)] = nil
 
-								refreshQuestFrameVisibility(currentMap)
+								frame:UpdateVisibility(currentMap)
 							end,
 						},
 					},
@@ -1445,6 +1464,7 @@ quest_template = {
 							disabled = function(info) return db.questList[info[3]].filter == nil or db.questList[info[3]].filter.zones == nil or db.questList[info[3]].filter.zones[tostring(getZoneFromMap())] ~= true end,
 							func = function(info)
 								local currentMap = getZoneFromMap()
+								local frame = getFrameFromSlot(info[3])
 
 								if db.questList[info[3]].filter == nil then
 									db.questList[info[3]].filter = {}
@@ -1454,7 +1474,7 @@ quest_template = {
 								end
 								db.questList[info[3]].filter.zones[tostring(currentMap)] = nil
 
-								refreshQuestFrameVisibility(currentMap)
+								frame:UpdateVisibility(currentMap)
 							end,
 						},
 					},
@@ -1474,30 +1494,25 @@ function DropQuests:OnInitialize()
 	self.db.RegisterCallback(self, "OnProfileCopied", "OnProfileChanged")
 	self.db.RegisterCallback(self, "OnProfileReset", "OnProfileChanged")
 	db = self.db.profile
+	local migrate_from = 0
+	if db.version == nil then
+		db.version = DB_VERSION
+	elseif db.version > DB_VERSION then
+		migrate_from = db.version
+		migrateDB(migrate_from)
+	end
 
-	-- Get the option table for profiles
-	options.args.profiles = ACO:GetOptionsTable(self.db)
-	options.args.profiles.name = L["Profiles"]
+	refreshOptions(self)
+
+	self.optionsFrame = {}
+	self.optionsFrame.general = ACDI:AddToBlizOptions(addonName, addonName, nil, "general")
+	self.optionsFrame.profiles = ACDI:AddToBlizOptions(addonName, options.args.profiles.name, addonName, "profiles")
 
 	ACR:RegisterOptionsTable(addonName, options)
 	self:RegisterChatCommand("dropquests", function() ACDI:Open(addonName) end)
 
-	self.optionsFrame = {}
-	self.optionsFrame.general = ACDI:AddToBlizOptions(addonName, addonName, nil, "general")
-	--self.optionsFrame.quests = ACDI:AddToBlizOptions(addonName, options.args.quests.name, addonName, "quests")
-	self.optionsFrame.profiles = ACDI:AddToBlizOptions(addonName, options.args.profiles.name, addonName, "profiles")
-
 	-- Show/Hide quests when switching between zones for filtered quests
 	HBD.RegisterCallback(self, "PlayerZoneChanged", "OnZoneChanged")
-
-	-- Initialize options from database
-	for key, value in pairs(db.questList) do
-		initializeQuestSlotOptions(key)
-		local questOptions = options.args.general.args.quests.args[key]
-
-		questOptions.name = getQuestName(key) or "New Quest"
-		initializeQuestVars(key)
-	end
 
 	eventFrame = CreateFrame("Frame")
 
@@ -1538,6 +1553,12 @@ end
 
 function DropQuests:OnProfileChanged(event, database, newProfileKey)
 	db = database.profile
+	refreshOptions(self)
+
+	ACR:RegisterOptionsTable(addonName, options)
+	ACR:NotifyChange(addonName)
+
+	refreshQuestFrameVisibility(getZoneFromMap())
 end
 
 function DropQuests:OnZoneChanged(event, currentPlayerUiMapID, currentPlayerUiMapType)
