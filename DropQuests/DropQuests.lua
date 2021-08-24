@@ -15,7 +15,7 @@ local HBD = LibStub("HereBeDragons-2.0")
 ---------------------------------------------------------
 -- Addon declaration
 local addonName = "DropQuests"
-local addonDisplayName = "|cff9933"..addonName.."|r"
+local addonDisplayName = "|cFFFF9933"..addonName.."|r"
 DropQuests = ACE:NewAddon(addonName, "AceConsole-3.0", "AceEvent-3.0")
 local DropQuests = DropQuests
 local L = LibStub("AceLocale-3.0"):GetLocale(addonName, false)
