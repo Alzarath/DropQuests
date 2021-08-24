@@ -476,15 +476,15 @@ function createQuestFrame(slot_number)
 
 		if show_value then
 			local textOutput = tostring(itemCount)
-			local display_type = (db.questList[slot_number].appearance and db.questList[slot_number].appearance.display_type) or (db.defaults and db.defaults.display_type) or "numeric"
+			local text_display = (db.questList[slot_number].appearance and db.questList[slot_number].appearance.text_display) or (db.defaults and db.defaults.text_display) or "numeric"
 
-			if display_type == "numeric" then
+			if text_display == "numeric" then
 				if show_maximum then
 					textOutput = textOutput .. "/" .. itemGoal
 				end
-			elseif display_type == "countdown" then
+			elseif text_display == "countdown" then
 				textOutput = tostring(itemCount - itemGoal)
-			elseif display_type == "percentage" then
+			elseif text_display == "percentage" then
 				if itemGoal ~= 0 then
 					textOutput = string.format("%.1f", math.min(1, itemCount / itemGoal) * 100)
 				elseif itemCount ~= 0 then
@@ -729,8 +729,7 @@ default_options = {
 	args = {
 		general = {
 			type = "group",
-			name = L["GeneralSettings"],
-			desc = L["GeneralSettingsTooltip"],
+			name = L["DropQuests"],
 			order = 0,
 			get = function(info) return db[info.arg] end,
 			set = function(info, v)
@@ -739,11 +738,6 @@ default_options = {
 			end,
 			disabled = function() return not db.enabled end,
 			args = {
-				desc = {
-					name = L["GeneralSettingsDescription"],
-					type = "description",
-					order = 0,
-				},
 				enabled = {
 					type = "toggle",
 					name = L["EnableDropQuests"],
@@ -809,9 +803,9 @@ default_options = {
 								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
 							end,
 						},
-						display_type = {
-							name = L["DisplayType"],
-							desc = L["DisplayTypeTooltip"],
+						text_display = {
+							name = L["TextDisplay"],
+							desc = L["TextDisplayTooltip"],
 							type = "select",
 							order = 20,
 							values = {
@@ -819,13 +813,13 @@ default_options = {
 								["countdown"] = L["Countdown"],
 								["percentage"] = L["Percentage"],
 							},
-							get = function(info) return db.defaults and db.defaults.display_type or "numeric" end,
+							get = function(info) return db.defaults and db.defaults.text_display or "numeric" end,
 							set = function(info, v)
 								if not db.defaults then
 									db.defaults = {}
 								end
 
-								db.defaults.display_type = v
+								db.defaults.text_display = v
 								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateQuestProgress() end
 							end,
 						},
@@ -958,8 +952,8 @@ quest_template = {
 					end,
 				},
 				quest_type = {
-					name = L["DisplayType"],
-					desc = L["DisplayTypeTooltip"],
+					name = L["QuestType"],
+					desc = L["QuestTypeTooltip"],
 					type = "select",
 					order = 30,
 					values = {
@@ -1069,9 +1063,9 @@ quest_template = {
 						getFrameFromSlot(info[3]):UpdateFrameSize()
 					end,
 				},
-				display_type = {
-					name = L["DisplayType"],
-					desc = L["DisplayTypeTooltip"],
+				text_display = {
+					name = L["TextDisplay"],
+					desc = L["TextDisplayTooltip"],
 					type = "select",
 					order = 40,
 					values = {
@@ -1080,17 +1074,17 @@ quest_template = {
 						["countdown"] = L["Countdown"],
 						["percentage"] = L["Percentage"],
 					},
-					get = function(info) return db.questList[info[3]].appearance and db.questList[info[3]].appearance.display_type or "default" end,
+					get = function(info) return db.questList[info[3]].appearance and db.questList[info[3]].appearance.text_display or "default" end,
 					set = function(info, v)
 						local frame = getFrameFromSlot(info[3])
 						if not db.questList[info[3]].appearance then
 							db.questList[info[3]].appearance = {}
 						end
 
-						if v == "default" and db.questList[info[3]].appearance.display_type ~= nil then
-							db.questList[info[3]].appearance.display_type = nil
+						if v == "default" and db.questList[info[3]].appearance.text_display ~= nil then
+							db.questList[info[3]].appearance.text_display = nil
 						else
-							db.questList[info[3]].appearance.display_type = v
+							db.questList[info[3]].appearance.text_display = v
 						end
 						frame:UpdateItem()
 					end,
@@ -1208,12 +1202,12 @@ quest_template = {
 							if db.questList[info[3]].appearance.show_value ~= nil and not db.questList[info[3]].appearance.show_value then
 								return true
 							end
-							if db.questList[info[3]].appearance.display_type ~= nil then
-								return db.questList[info[3]].appearance.display_type ~= "numeric"
+							if db.questList[info[3]].appearance.text_display ~= nil then
+								return db.questList[info[3]].appearance.text_display ~= "numeric"
 							end
 						end
-						if db.defaults ~= nil and db.defaults.display_type ~= nil then
-							return db.defaults.display_type ~= "numeric"
+						if db.defaults ~= nil and db.defaults.text_display ~= nil then
+							return db.defaults.text_display ~= "numeric"
 						end
 						return false
 					end,

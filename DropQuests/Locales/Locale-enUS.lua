@@ -8,10 +8,6 @@ L["DropQuests"] = true
 L["EnableDropQuests"] = "Enable DropQuests"
 L["EnableDropQuestsTooltip"] = "Enable or disable DropQuests"
 
-L["GeneralSettings"] = "General Settings"
-L["GeneralSettingsTooltip"] = "Settings that affect every database"
-L["GeneralSettingsDescription"] = "These settings control the look and feel of DropQuests globally."
-
 L["Quests"] = true
 L["QuestsTooltip"] = "List of items to track"
 L["QuestsDescription"] = "These settings allow you to create new quests."
@@ -25,7 +21,6 @@ L["DeleteQuestConfirmDialog"] = "This will delete the quest. Are you sure?"
 
 L["QuestAdd"] = "New Quest"
 L["QuestAddTooltip"] = "Add a new quest"
-
 
 L["QuestName"] = "Name"
 L["QuestNameTooltip"] = "Display name of the quest"
@@ -109,8 +104,11 @@ L["ProgressWidthTooltip"] = "The width of the progress bar in pixels.\n\n|cFFFFF
 L["ResetProgressWidth"] = "Clear"
 L["ResetProgressWidthTooltip"] = "Resets width to the default value"
 
-L["DisplayType"] = "Display"
-L["DisplayTypeTooltip"] = "Change how the quantity text appears"
+L["TextDisplay"] = "Text Format"
+L["TextDisplayTooltip"] = "Change how the quantity text appears"
+
+L["QuestType"] = "Type"
+L["QuestTypeTooltip"] = "Change the type of item to track"
 
 L["XOffset"] = "X Offset"
 L["XOffsetTooltip"] = "Distance from the horizontal edge of the screen"
