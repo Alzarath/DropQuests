@@ -223,7 +223,6 @@ local function setQuestItem(slot_number, itemID)
 	if quest_type == "item" then
 		db.questList[slot_number].itemIcon = GetItemIcon(itemID)
 	end
-
 	ACR:NotifyChange(addonName)
 end
 
@@ -367,11 +366,13 @@ function createQuestFrame(slot_number)
 			return nil
 		end
 
-		if getQuestType(slot_number) == "currency" then
+		local quest_type = getQuestType(slot_number)
+
+		if quest_type == "currency" then
 			local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(db.questList[slot_number].itemID)
 			frame.button:Reset()
 			if currencyInfo then SetItemButtonTexture(frame.button, currencyInfo.iconFileID) end
-		else
+		elseif quest_type == "item" then
 			frame.button:SetItem(db.questList[slot_number].itemID)
 		end
 
@@ -385,9 +386,18 @@ function createQuestFrame(slot_number)
 	end
 
 	function frame:UpdateName()
+		local quest_type = getQuestType(slot_number)
 		local new_name = getQuestName(slot_number) or ""
 
-		frame.name:SetText(new_name)
+		if quest_type == "item" and new_name == "" then
+			local item = Item:CreateFromItemID(db.questList[slot_number].itemID)
+
+			item:ContinueOnItemLoad(function()
+				frame.name:SetText(getQuestName(slot_number) or "")
+			end)
+		else
+			frame.name:SetText(new_name)
+		end
 
 		return new_name
 	end
@@ -924,17 +934,17 @@ quest_template = {
 						return ""
 					end,
 					set = function(info, v)
-						local inputID = v
+						local inputID = tonumber(v)
 						local frame = getFrameFromSlot(info[3])
 
-						if tonumber(inputID) == nil then
+						if inputID == nil then
 							if getQuestType(info[3]) == "currency" then
 								inputID = C_CurrencyInfo.GetCurrencyIDFromLink(inputID)
 							else
 								inputID = GetItemInfoInstant(v)
 							end
 
-							if tonumber(inputID) == nil then
+							if inputID == nil then
 								return
 							end
 						end
