@@ -732,7 +732,7 @@ options = {
 					disabled = false,
 				},
 				add_quest = {
-					name = "+",
+					name = L["QuestAdd"],
 					desc = L["QuestAddTooltip"],
 					type = "execute",
 					order = 10,

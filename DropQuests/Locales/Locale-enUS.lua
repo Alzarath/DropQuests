@@ -17,19 +17,15 @@ L["QuestsTooltip"] = "List of items to track"
 L["QuestsDescription"] = "These settings allow you to create new quests."
 
 L["Quest"] = true
+L["QuestOptionsDescription"] = "These settings allow you to modify a quest."
 
 L["DeleteQuest"] = "Delete"
 L["DeleteQuestTooltip"] = "Deletes the quest entirely. Can not be undone."
 L["DeleteQuestConfirmDialog"] = "This will delete the quest. Are you sure?"
 
-L["QuestList"] = "Quest List"
-L["QuestOptions"] = "Quest Options"
-L["QuestOptionsDescription"] = "These settings allow you to modify a quest."
+L["QuestAdd"] = "New Quest"
+L["QuestAddTooltip"] = "Add a new quest"
 
-L["QuestAddTooltip"] = "Add Quest"
-L["QuestRemoveTooltip"] = "Remove Quest"
-
-L["QuestInfo"] = "Quest Info"
 
 L["QuestName"] = "Name"
 L["QuestNameTooltip"] = "Display name of the quest"
@@ -63,7 +59,7 @@ L["UseBankTooltip"] = "Include items from the character's bank and reagent bank 
 
 L["Filters"] = true
 L["FiltersTooltip"] = "Conditional display settings"
-L["FiltersDescription"] = "Allows you to conditionally disable quests based on certain criteria."
+L["FiltersDescription"] = "Conditionally enable/disable quests based on certain criteria."
 
 L["AutoFilterZone"] = "Auto Filter"
 L["AutoFilterZoneTooltip"] = "Automatically add the current zone to the quest's filter list when its item is picked up"
