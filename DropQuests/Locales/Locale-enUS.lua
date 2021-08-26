@@ -43,11 +43,17 @@ L["ShowValueTooltip"] = "Displays the current item quantity text"
 L["ShowMax"] = "Show Max"
 L["ShowMaxTooltip"] = "Displays the item goal text"
 
+L["ShowProgressBar"] = "Show Progress Bar"
+L["ShowProgressBarTooltip"] = "Displays the progress bar"
+
 L["HoverMode"] = "Hover Mode"
 L["HoverModeTooltip"] = "Displays item text only while the progress bar is hovered over"
 
 L["ShowName"] = "Show Name"
 L["ShowNameTooltip"] = "Displays the item name"
+
+L["MergeNameProgress"] = "Merge Name/Progress"
+L["MergeNameProgressTooltip"] = "Display the name on the same line as the progress bar"
 
 L["UseBank"] = "Use Bank"
 L["UseBankTooltip"] = "Include items from the character's bank and reagent bank in the item progress"
@@ -85,6 +91,11 @@ L["AppearanceSettings"] = "Appearance"
 L["AppearanceSettingsTooltip"] = "Settings affecting all quests' visuals"
 L["AppearanceSettingsDescription"] = "These settings control the look and feel of DropQuests globally."
 
+L["Group"] = true
+L["Grouped"] = true
+L["GroupedTooltip"] = "Whether quests are grouped. Grouped quests all share the same appearance and appear as a list."
+L["GroupedHint"] = "Appearance options limited while in Grouped mode."
+
 L["QuestAppearanceSettings"] = "Appearance"
 L["QuestAppearanceSettingsTooltip"] = "Settings affecting the quest frame's visuals"
 L["QuestAppearanceSettingsDescription"] = "These settings control the look and feel of the quest frame."
@@ -98,11 +109,12 @@ L["Numeric"] = true
 L["Countdown"] = true
 L["Percentage"] = true
 
+L["Defaults"] = "Defaults"
 L["ProgressWidth"] = "Width"
 L["ProgressWidthTooltip"] = "The width of the progress bar in pixels.\n\n|cFFFFFF000|r hides the bar entirely and displays the quantity on the icon."
 
-L["ResetProgressWidth"] = "Clear"
-L["ResetProgressWidthTooltip"] = "Resets width to the default value"
+L["ResetAppearance"] = "Reset To Defaults"
+L["ResetAppearanceTooltip"] = "Resets appearance values to their defaults"
 
 L["TextDisplay"] = "Text Format"
 L["TextDisplayTooltip"] = "Change how the quantity text appears"
@@ -115,6 +127,12 @@ L["XOffsetTooltip"] = "Distance from the horizontal edge of the screen"
 
 L["YOffset"] = "Y Offset"
 L["YOffsetTooltip"] = "Distance from the vertical edge of the screen"
+
+L["Separator"] = true
+L["SeparatorTooltip"] = "How vertically far apart quests are from eachother in the list"
+
+L["ShowIcon"] = "Show Icon"
+L["ShowIconTooltip"] = "Toggle the visibility of the quest icon"
 
 L["Anchor"] = true
 L["AnchorTooltip"] = "Corner that the frame is offset from"
