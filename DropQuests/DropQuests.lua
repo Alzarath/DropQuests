@@ -19,7 +19,7 @@ local addonDisplayName = "|cFFFF9933"..addonName.."|r"
 DropQuests = ACE:NewAddon(addonName, "AceConsole-3.0", "AceEvent-3.0")
 local DropQuests = DropQuests
 local L = LibStub("AceLocale-3.0"):GetLocale(addonName, false)
-local DB_VERSION = 1
+local DB_VERSION = 2
 
 ---------------------------------------------------------
 -- Variable declaration
@@ -27,8 +27,12 @@ local DB_VERSION = 1
 -- Constants
 local MAX_QUESTS = 200
 local DEFAULT_PROGRESS_BAR_WIDTH = 80
+local DEFAULT_PROGRESS_BAR_HEIGHT = 16
+local DEFAULT_PADDING = 4
+local DEFAULT_QUEST_CONTAINER_SEPARATOR = 40
+local BUTTON_WIDTH_SMALL = 18.5
+local BUTTON_WIDTH_NORMAL = 37
 
-local previousPlayerUiMapID
 local questVars = {}
 local eventFrame
 
@@ -36,7 +40,20 @@ local screenWidth = GetScreenWidth()
 local screenHeight = GetScreenHeight()
 
 ---------------------------------------------------------
--- Our db upvalue and db defaults
+-- Quest Group Container
+
+local questContainer = CreateFrame("Frame", "questframe_container", UIParent)
+
+questContainer:SetPoint("CENTER")
+questContainer:SetClampedToScreen(true)
+questContainer:RegisterForDrag("LeftButton")
+questContainer:EnableMouse(true)
+questContainer:SetMovable(true)
+questContainer:SetScript("OnDragStart", function() startMovingQuestContainer() end)
+questContainer:SetScript("OnDragStop", function() stopMovingQuestContainer() end)
+
+---------------------------------------------------------
+-- Database initialization and defaults
 local db
 local options
 local defaults = {
@@ -133,12 +150,12 @@ local function removeQuestFromSlot(slot_number)
 end
 
 local function getContinentFromMap(uiMapID)
-	local mapID = uiMapID or C_Map.GetBestMapForUnit("player")
-	if mapID == nil then return nil end
-	local mapInfo = C_Map.GetMapInfo(mapID)
+	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
+	if uiMapID == nil then return nil end
+	local mapInfo = C_Map.GetMapInfo(uiMapID)
 
 	if mapInfo.mapType == Enum.UIMapType.Continent then
-		return mapID
+		return uiMapID
 	end
 
 	-- Track old map information so we can assume continent-less maps are continents themselves
@@ -146,13 +163,13 @@ local function getContinentFromMap(uiMapID)
 	local oldMapInfo
 
 	while mapInfo.mapType > Enum.UIMapType.Continent do
-		oldMapID = mapID
+		oldMapID = uiMapID
 		oldMapInfo = mapInfo
-		mapID = mapInfo.parentMapID
-		mapInfo = C_Map.GetMapInfo(mapID)
+		uiMapID = mapInfo.parentMapID
+		mapInfo = C_Map.GetMapInfo(uiMapID)
 
 		if mapInfo.mapType == Enum.UIMapType.Continent then
-			return mapID
+			return uiMapID
 		-- Assume maps without a parent continent are themselves a continent
 		elseif mapInfo.mapType < Enum.UIMapType.Continent then
 			return oldMapID
@@ -164,12 +181,12 @@ local function getContinentFromMap(uiMapID)
 end
 
 local function getZoneFromMap(uiMapID)
-	local mapID = uiMapID or C_Map.GetBestMapForUnit("player")
-	if mapID == nil then return nil end
-	local mapInfo = C_Map.GetMapInfo(mapID)
+	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
+	if uiMapID == nil then return nil end
+	local mapInfo = C_Map.GetMapInfo(uiMapID)
 
 	if mapInfo.mapType == Enum.UIMapType.Zone then
-		return mapID
+		return uiMapID
 	end
 
 	-- Track old map information so we can assume zone-less maps are zones themselves
@@ -177,13 +194,13 @@ local function getZoneFromMap(uiMapID)
 	local oldMapInfo
 
 	while mapInfo.mapType > Enum.UIMapType.Zone do
-		oldMapID = mapID
+		oldMapID = uiMapID
 		oldMapInfo = mapInfo
-		mapID = mapInfo.parentMapID
-		mapInfo = C_Map.GetMapInfo(mapID)
+		uiMapID = mapInfo.parentMapID
+		mapInfo = C_Map.GetMapInfo(uiMapID)
 
 		if mapInfo.mapType == Enum.UIMapType.Zone then
-			return mapID
+			return uiMapID
 		-- Assume maps without a parent zone are themselves a zone
 		elseif mapInfo.mapType < Enum.UIMapType.Zone then
 			return oldMapID
@@ -216,7 +233,6 @@ local function setQuestItem(slot_number, itemID)
 		return
 	end
 
-	local frame = questVars[slot_number].frame
 	local quest_type = getQuestType(slot_number)
 
 	db.questList[slot_number].itemID = itemID
@@ -231,7 +247,7 @@ end
 
 function createQuestFrame(slot_number)
 	local frame = CreateFrame("Frame", "questframe_"..slot_number, UIParent, "StatusTrackingBarTemplate")
-	local padding = 4
+	local padding = DEFAULT_PADDING
 
 	local startMoving = function(self)
 		frame:StartMoving()
@@ -248,8 +264,10 @@ function createQuestFrame(slot_number)
 			db.questList[slot_number].appearance = {}
 		end
 
-		db.questList[slot_number].appearance.x = horizontal_anchor == "LEFT" and frame:GetLeft() or screenWidth - frame:GetRight()
-		db.questList[slot_number].appearance.y = vertical_anchor == "BOTTOM" and frame:GetBottom() or screenHeight - frame:GetTop()
+		db.questList[slot_number].appearance.x = horizontal_anchor == "RIGHT" and screenWidth - frame:GetRight() or frame:GetLeft()
+		db.questList[slot_number].appearance.y = vertical_anchor == "TOP" and screenHeight - frame:GetTop() or frame:GetBottom()
+
+		frame:UpdateFramePosition()
 		ACR:NotifyChange(addonName)
 	end
 
@@ -270,13 +288,14 @@ function createQuestFrame(slot_number)
 	frame.button:SetScript("OnDragStop", stopMoving)
 
 	local button_width = frame.button:GetWidth()
-	local after_button_offset = padding * 2 + button_width
+	local progress_offset = padding * 2 + button_width
+	local vertical_height = progress_offset
 
-	frame:SetSize(128, after_button_offset)
+	frame:SetSize(128, vertical_height)
 
 	frame.name = frame:CreateFontString()
-	frame.name:SetSize(DEFAULT_PROGRESS_BAR_WIDTH, 16)
-	frame.name:SetPoint("BOTTOMLEFT", after_button_offset, 24)
+	frame.name:SetSize(DEFAULT_PROGRESS_BAR_WIDTH, DEFAULT_PROGRESS_BAR_HEIGHT)
+	frame.name:SetPoint("BOTTOMLEFT", progress_offset, padding * 2 + DEFAULT_PROGRESS_BAR_HEIGHT)
 	frame.name:SetFontObject("GameFontNormal")
 	frame.name:SetJustifyH("LEFT")
 	frame.name:SetWordWrap(false)
@@ -284,16 +303,17 @@ function createQuestFrame(slot_number)
 
 	frame.progress_text_frame = CreateFrame("Frame", "questframe_"..slot_number.."_progresstext", frame)
 	frame.progress_text_frame:SetSize(frame:GetWidth(), frame:GetHeight())
-	frame.progress_text_frame:SetPoint("BOTTOMLEFT", 0, 0)
+	frame.progress_text_frame:SetPoint("BOTTOMLEFT")
 	frame.progress_text = frame.progress_text_frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	frame.progress_text:SetPoint("BOTTOMLEFT", after_button_offset, padding)
+	frame.progress_text:SetPoint("BOTTOMLEFT", progress_offset, padding)
+	frame.progress_text:SetSize(DEFAULT_PROGRESS_BAR_WIDTH, DEFAULT_PROGRESS_BAR_HEIGHT)
 	frame.progress_text:SetJustifyH("RIGHT")
-	frame.progress_text:SetJustifyV("BOTTOM")
+	frame.progress_text:SetJustifyV("MIDDLE")
 	frame.progress_text:SetMaxLines(1)
 	frame.progress_text:SetTextColor(1.0, 1.0, 1.0)
 
-	frame.StatusBar:SetPoint("BOTTOMLEFT", after_button_offset, padding)
-	frame.StatusBar:SetSize(DEFAULT_PROGRESS_BAR_WIDTH, 16)
+	frame.StatusBar:SetPoint("BOTTOMLEFT", progress_offset, padding)
+	frame.StatusBar:SetSize(DEFAULT_PROGRESS_BAR_WIDTH, DEFAULT_PROGRESS_BAR_HEIGHT)
 	frame.StatusBar:SetStatusBarColor(0.75, 0.75, 0.75)
 
 	frame.button:SetScript("OnEnter", function(self)
@@ -354,7 +374,9 @@ function createQuestFrame(slot_number)
 	function frame:FullRefresh()
 		frame:UpdateItem()
 		frame:UpdateName()
-		frame:UpdateFramePosition()
+		if db.appearance == nil or not db.appearance.grouped then
+			frame:UpdateFramePosition()
+		end
 		frame:UpdateFrameSize()
 		frame:UpdateQuestProgressFrame()
 
@@ -403,35 +425,135 @@ function createQuestFrame(slot_number)
 	end
 
 	function frame:UpdateFrameSize()
-		local show_name = db.questList[slot_number].show_name == nil or db.questList[slot_number].show_name
-		local progress_bar_width = (db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.progress_width ~= nil and db.questList[slot_number].appearance.progress_width) or (db.defaults ~= nil and db.defaults.progress_width ~= nil and db.defaults.progress_width) or DEFAULT_PROGRESS_BAR_WIDTH
+		local show_name = true
+		local show_icon = true
+		local show_value = true
+		local show_progress_bar = true
+		local merge_name_progress = false
+		local progress_bar_width = DEFAULT_PROGRESS_BAR_WIDTH
+		local icon_scale = 1.0
+		if db.appearance == nil or db.appearance.grouped then
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_name ~= nil then
+				show_name = db.appearance.defaults.show_name
+			end
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_icon ~= nil then
+				show_icon = db.appearance.defaults.show_icon
+			end
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_value ~= nil then
+				show_value = db.appearance.defaults.show_value
+			end
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_progress_bar ~= nil then
+				show_progress_bar = db.appearance.defaults.show_progress_bar
+			end
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.merge_name_progress ~= nil then
+				merge_name_progress = db.appearance.defaults.merge_name_progress
+			end
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.progress_width ~= nil then
+				progress_bar_width = db.appearance.defaults.progress_width
+			end
+		else
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.show_name ~= nil then
+				show_name = db.questList[slot_number].appearance.show_name
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_name ~= nil then
+				show_name = db.appearance.defaults.show_name
+			end
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.show_value ~= nil then
+				show_value = db.questList[slot_number].appearance.show_value
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_value ~= nil then
+				show_value = db.appearance.defaults.show_value
+			end
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.show_icon ~= nil then
+				show_icon = db.questList[slot_number].appearance.show_icon
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_icon ~= nil then
+				show_icon = db.appearance.defaults.show_icon
+			end
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.show_progress_bar ~= nil then
+				show_progress_bar = db.questList[slot_number].appearance.show_progress_bar
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_progress_bar ~= nil then
+				show_progress_bar = db.appearance.defaults.show_progress_bar
+			end
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.merge_name_progress ~= nil then
+				merge_name_progress = db.questList[slot_number].appearance.merge_name_progress
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.merge_name_progress ~= nil then
+				merge_name_progress = db.appearance.defaults.merge_name_progress
+			end
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.progress_width ~= nil then
+				progress_bar_width = db.questList[slot_number].appearance.progress_width
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.progress_width ~= nil then
+				progress_bar_width = db.appearance.defaults.progress_width
+			end
+		end
+
+		-- Minify the icon if either the progress bar or name are not shown to save space
+		if merge_name_progress or not show_name or not show_progress_bar and not show_value then
+			icon_scale = 0.5
+		end
+
+		frame.button:SetScale(icon_scale)
+		button_width = frame.button:GetWidth() * icon_scale
+		vertical_height = padding * 2 + button_width
+		if show_icon then
+			progress_offset = vertical_height
+		else
+			button_width = 0
+			progress_offset = padding
+		end
 
 		local text_width = progress_bar_width
 		if progress_bar_width > 0 then
-			frame:SetSize(after_button_offset + progress_bar_width + padding, after_button_offset)
-			frame.StatusBar:Show()
+			frame:SetSize(progress_offset + progress_bar_width + padding, vertical_height)
+			frame.StatusBar:SetShown(show_progress_bar)
 			frame.name:SetShown(show_name)
 			frame.StatusBar:SetSize(progress_bar_width, frame.StatusBar:GetHeight())
 
-			frame.progress_text:SetPoint("BOTTOMLEFT", after_button_offset, padding)
+			frame.progress_text:SetPoint("BOTTOMLEFT", progress_offset, padding)
 			frame.progress_text:SetMaxLines(1)
-		else
-			frame:SetSize(after_button_offset, after_button_offset)
+			frame.progress_text:SetJustifyV("MIDDLE")
+		elseif show_icon then
+			frame:SetSize(progress_offset, vertical_height)
 			frame.StatusBar:Hide()
 			frame.name:Hide()
 
 			text_width = max(1, button_width - padding)
 			frame.progress_text:SetPoint("BOTTOMLEFT", padding + padding / 2, padding + padding / 2)
 			frame.progress_text:SetMaxLines(2)
+			frame.progress_text:SetJustifyV("BOTTOM")
 		end
+
+		-- Show/hide the frame if it would be 0-width anyways
+		if progress_bar_width > 0 then
+			if not frame:IsVisible() and questVisibilityCheck(slot_number) then
+				frame:Show()
+			end
+		else
+			if frame:IsVisible() and not show_icon then
+				frame:Hide()
+			end
+		end
+
+		if merge_name_progress or not show_progress_bar and not show_value and show_name then
+			frame.name:SetPoint("BOTTOMLEFT", progress_offset, padding)
+		else
+			frame.name:SetPoint("BOTTOMLEFT", progress_offset, padding * 2 + DEFAULT_PROGRESS_BAR_HEIGHT)
+		end
+
+		if show_progress_bar then
+			frame.StatusBar:SetPoint("BOTTOMLEFT", progress_offset, padding)
+		end
+		if show_name then
+			frame.name:SetSize(text_width, frame.name:GetHeight())
+		end
+		frame.button:SetShown(show_icon)
 		frame.progress_text_frame:SetSize(frame:GetWidth(), frame:GetHeight())
-		frame.progress_text:SetSize(text_width, text_width)
-		frame.name:SetSize(text_width, frame.name:GetHeight())
+		frame.progress_text:SetSize(text_width, DEFAULT_PROGRESS_BAR_HEIGHT)
+
+		frame:UpdateQuestProgressFrame()
 	end
 
-	function frame:UpdateFramePosition()
+	function frame:UpdateFramePosition(x, y)
 		frame:ClearAllPoints()
-		if db.questList[slot_number].appearance == nil or db.questList[slot_number].appearance.x == nil or db.questList[slot_number].appearance.y == nil then
+
+		if (db.questList[slot_number].appearance == nil or db.questList[slot_number].appearance.x == nil or db.questList[slot_number].appearance.y == nil) and (x == nil or y == nil) then
 			frame:SetPoint("CENTER")
 			return
 		end
@@ -441,8 +563,8 @@ function createQuestFrame(slot_number)
 		local horizontal_anchor = string.sub(anchor, -5, -1) == "RIGHT" and "RIGHT" or "LEFT"
 		local vertical_anchor = string.sub(anchor, 1, 3) == "TOP" and "TOP" or "BOTTOM"
 
-		local x_offset = db.questList[slot_number].appearance.x
-		local y_offset = db.questList[slot_number].appearance.y
+		local x_offset = x or db.questList[slot_number].appearance.x
+		local y_offset = y or db.questList[slot_number].appearance.y
 
 		if horizontal_anchor == "RIGHT" then
 			x_offset = -1 * x_offset
@@ -452,18 +574,46 @@ function createQuestFrame(slot_number)
 			y_offset = -1 * y_offset
 		end
 
-		frame:SetPoint(db.questList[slot_number].appearance and db.questList[slot_number].appearance.anchor or "BOTTOMLEFT", x_offset, y_offset)
+		frame:SetPoint(anchor, x_offset, y_offset)
 	end
 
-	function frame:UpdateQuestProgress()
-		local use_bank = db.questList[slot_number].use_bank == nil or db.questList[slot_number].use_bank
-		local show_value = db.questList[slot_number].appearance == nil or db.questList[slot_number].appearance.show_value == nil or db.questList[slot_number].appearance.show_value
-		local show_maximum = db.questList[slot_number].appearance == nil or db.questList[slot_number].appearance.show_maximum == nil or db.questList[slot_number].appearance.show_maximum
+	function frame:UpdateQuestProgress(value)
+		local use_bank = db.questList[slot_number].use_bank ~= nil and db.questList[slot_number].use_bank or true
+		local show_value = true
+		local show_maximum = true
+		local show_icon = true
+		if db.appearance == nil or db.appearance.grouped then
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_value ~= nil then
+				show_value = db.appearance.defaults.show_value
+			end
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_icon ~= nil then
+				show_icon = db.appearance.defaults.show_icon
+			end
+		else
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.show_value ~= nil then
+				show_value = db.questList[slot_number].appearance.show_value
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_value ~= nil then
+				show_value = db.appearance.defaults.show_value
+			end
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.show_icon ~= nil then
+				show_icon = db.questList[slot_number].appearance.show_icon
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_icon ~= nil then
+				show_icon = db.appearance.defaults.show_icon
+			end
+		end
 
-		local itemCount = 0
+		if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.show_maximum ~= nil then
+			show_maximum = db.questList[slot_number].appearance.show_maximum
+		elseif db.questList[slot_number].goal == nil or db.questList[slot_number].goal == 0 then
+			show_maximum = false
+		elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_maximum ~= nil then
+			show_maximum = db.appearance.defaults.show_maximum
+		end
+
+		local itemCount = value or 0
 		local itemGoal = db.questList[slot_number].goal or 0
 
-		if db.questList[slot_number].itemID ~= nil then
+		if value == nil and db.questList[slot_number].itemID ~= nil then
 			if getQuestType(slot_number) == "currency" then
 				local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(db.questList[slot_number].itemID)
 				if currencyInfo then itemCount = currencyInfo.quantity end
@@ -476,7 +626,7 @@ function createQuestFrame(slot_number)
 
 		if show_value then
 			local textOutput = tostring(itemCount)
-			local text_display = (db.questList[slot_number].appearance and db.questList[slot_number].appearance.text_display) or (db.defaults and db.defaults.text_display) or "numeric"
+			local text_display = (db.questList[slot_number].appearance and db.questList[slot_number].appearance.text_display) or (db.appearance and db.appearance.defaults and db.appearance.defaults.text_display) or "numeric"
 
 			if text_display == "numeric" then
 				if show_maximum then
@@ -510,9 +660,27 @@ function createQuestFrame(slot_number)
 	end
 
 	function frame:UpdateQuestProgressFrame()
-		--local show_name = db.questList[slot_number].show_name == nil or db.questList[slot_number].show_name
-		local show_value = db.questList[slot_number].show_value == nil or db.questList[slot_number].show_value
-		local hover_mode = db.questList[slot_number].text_hover_mode ~= nil and db.questList[slot_number].text_hover_mode
+		local show_value = true
+		local hover_mode = false
+		if db.appearance == nil or db.appearance.grouped then
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_value ~= nil then
+				show_value = db.appearance.defaults.show_value
+			end
+			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.text_hover_mode ~= nil then
+				hover_mode = db.appearance.defaults.text_hover_mode
+			end
+		else
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.show_value ~= nil then
+				show_value = db.questList[slot_number].appearance.show_value
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_value ~= nil then
+				show_value = db.appearance.defaults.show_value
+			end
+			if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.text_hover_mode ~= nil then
+				hover_mode = db.questList[slot_number].appearance.text_hover_mode
+			elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.text_hover_mode ~= nil then
+				hover_mode = db.appearance.defaults.text_hover_mode
+			end
+		end
 
 		frame.progress_text:SetShown(show_value)
 		if show_value then
@@ -529,11 +697,20 @@ function createQuestFrame(slot_number)
 	end
 
 	function frame:UpdateVisibility(uiMapID)
+		local wasVisible = frame:IsVisible()
+		local isVisible = false
+
 		if questVisibilityCheck(slot_number, uiMapID) then
-			showQuestFrame(slot_number)
+			isVisible = showQuestFrame(slot_number)
 		else
-			hideQuestFrame(slot_number)
+			isVisible = hideQuestFrame(slot_number)
 		end
+
+		if db.appearance and db.appearance.grouped then
+			moveQuestsToContainer()
+		end
+
+		return frame:IsVisible()
 	end
 
 	frame:Hide()
@@ -542,7 +719,7 @@ function createQuestFrame(slot_number)
 end
 
 function showQuestFrame(slot_number)
-	local frame = questVars[slot_number].frame
+	local frame = getFrameFromSlot(slot_number)
 
 	if db.questList[slot_number].itemID == nil then
 		return nil
@@ -554,24 +731,25 @@ function showQuestFrame(slot_number)
 	frame:RegisterEvent("BAG_UPDATE_DELAYED")
 
 	frame:FullRefresh()
+
 	return frame:IsVisible()
 end
 
 function hideQuestFrame(slot_number)
-	local frame = questVars[slot_number].frame
+	local frame = getFrameFromSlot(slot_number)
 
 	if frame ~= nil then
 		frame:UnregisterEvent("BAG_UPDATE_DELAYED")
 
 		frame:Hide()
-		return not frame:IsVisible()
+		return frame:IsVisible()
 	end
 
-	return true
+	return false
 end
 
 function addZoneToFilterList(slot_number, uiMapID)
-	local frame = getFrameFromSlot(key)
+	local frame = getFrameFromSlot(slot_number)
 	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
 
 	local zone = getZoneFromMap(uiMapID)
@@ -584,13 +762,13 @@ function addZoneToFilterList(slot_number, uiMapID)
 	end
 	db.questList[slot_number].filter.zones[tostring(zone)] = true
 
-	frame:UpdateVisibility(tostring(continent))
+	frame:UpdateVisibility(tostring(zone))
 
 	return zone
 end
 
 function addContinentToFilterList(slot_number, uiMapID)
-	local frame = getFrameFromSlot(key)
+	local frame = getFrameFromSlot(slot_number)
 	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
 
 	local continent = getContinentFromMap(uiMapID)
@@ -695,8 +873,10 @@ function questVisibilityCheck(slot_number, currentPlayerUiMapID)
 		return true
 	end
 
+	local frame = getFrameFromSlot(slot_number)
+
 	-- If nothing applies, keep it as-is
-	return questVars[slot_number].frame ~= nil and questVars[slot_number].frame:IsVisible()
+	return frame ~= nil and frame:IsVisible()
 end
 
 -- Refresh the visibility of all quest frames assuming the designated map ID
@@ -712,9 +892,142 @@ function refreshQuestFrameVisibility(uiMapID)
 	return true
 end
 
+---------------------------------------------------------
+-- Quest Container Functions
+
+function attachFramesToContainer()
+	setQuestContainerWidth()
+	setQuestContainerPosition()
+	moveQuestsToContainer()
+
+	questContainer:Show()
+end
+
+function detachFramesFromContainer()
+	for key, _ in pairs(db.questList) do
+		local frame = getFrameFromSlot(key)
+
+		frame:SetParent(UIParent)
+		frame:UpdateFramePosition()
+
+		frame:EnableMouse(true)
+		frame:RegisterForDrag("LeftButton")
+		frame.button:RegisterForDrag("LeftButton")
+	end
+	questContainer:Hide()
+end
+
+function setQuestContainerPosition()
+	questContainer:ClearAllPoints()
+	if db.appearance and db.appearance.group and (db.appearance.group.x_offset or db.appearance.group.y_offset) then
+		questContainer:SetPoint("BOTTOMLEFT", db.appearance.group.x_offset, db.appearance.group.y_offset)
+	else
+		questContainer:SetPoint("CENTER")
+	end
+end
+
+function setQuestContainerWidth()
+	local questContainerWidth = db.appearance and db.appearance.defaults and db.appearance.defaults.progress_width or DEFAULT_PROGRESS_BAR_WIDTH
+	questContainerWidth = questContainerWidth + DEFAULT_PADDING * 4
+
+	if db.appearance == nil or db.appearance.defaults == nil or db.appearance.defaults.show_icon == nil or db.appearance.defaults.show_icon then
+		if db.appearance == nil or db.appearance.defaults == nil or ((db.appearance.defaults.show_progress_bar == nil or db.appearance.defaults.show_progress_bar or db.appearance.defaults.show_value == nil or db.appearance.defaults.show_value) and db.appearance.defaults.show_name == nil or db.appearance.defaults.show_name) then
+			questContainerWidth = questContainerWidth + BUTTON_WIDTH_NORMAL + DEFAULT_PADDING
+		else
+			questContainerWidth = questContainerWidth + BUTTON_WIDTH_SMALL + DEFAULT_PADDING
+		end
+	end
+
+	questContainer:SetWidth(questContainerWidth)
+
+	return questContainerWidth
+end
+
+function moveQuestsToContainer()
+	local heightOffset = DEFAULT_PADDING
+	local lastFrameHeight = 0
+	local separator = db.appearance and db.appearance.group and db.appearance.group.separator or DEFAULT_QUEST_CONTAINER_SEPARATOR
+
+	for key, _ in pairs(db.questList) do
+		local frame = getFrameFromSlot(key)
+
+		frame:SetParent(questContainer)
+		frame:EnableMouse(false)
+		frame:RegisterForDrag()
+		frame.button:RegisterForDrag()
+
+		if questVisibilityCheck(key) then
+			lastFrameHeight = frame:GetHeight()
+			frame:ClearAllPoints()
+			frame:SetPoint("BOTTOMLEFT", DEFAULT_PADDING, heightOffset)
+			heightOffset = heightOffset + separator
+		end
+	end
+	questContainer:SetHeight(heightOffset - separator + lastFrameHeight + DEFAULT_PADDING)
+end
+
+function startMovingQuestContainer()
+	local frame = questContainer
+	frame:StartMoving()
+end
+
+function stopMovingQuestContainer()
+	local frame = questContainer
+	frame:StopMovingOrSizing()
+	local anchor = "BOTTOMLEFT"
+
+	local horizontal_anchor = string.sub(anchor, -5, -1) == "RIGHT" and "RIGHT" or "LEFT"
+	local vertical_anchor = string.sub(anchor, 1, 3) == "TOP" and "TOP" or "BOTTOM"
+
+	if db.appearance == nil then
+		db.appearance = {}
+	end
+	if db.appearance.group == nil then
+		db.appearance.group = {}
+	end
+
+	db.appearance.group.x_offset = horizontal_anchor == "RIGHT" and screenWidth - frame:GetRight() or frame:GetLeft()
+	db.appearance.group.y_offset = vertical_anchor == "TOP" and screenHeight - frame:GetTop() or frame:GetBottom()
+
+	frame:ClearAllPoints()
+	frame:SetPoint(anchor, db.appearance.group.x_offset, db.appearance.group.y_offset)
+	ACR:NotifyChange(addonName)
+end
+
+---------------------------------------------------------
+-- Database Functions
+
 function migrateDB(migrate_version)
 	print(addonDisplayName..":", "Migrating database from DB", "v"..migrate_version, "to", "v"..DB_VERSION)
-	db.version = DB_VERSION
+
+	-- Migrate database version 1 to version 2
+	if migrate_version <= 1 then
+		if db.defaults ~= nil then
+			if db.appearance == nil then
+				db.appearance = {}
+			end
+			if db.appearance.defaults == nil then
+				db.appearance.defaults = {}
+			end
+			for key, value in pairs(db.defaults) do
+				if db.appearance.defaults == nil or db.appearance.defaults[key] == nil then
+					db.appearance.defaults[key] = copy(db.defaults[key])
+				end
+			end
+			db.defaults = nil
+		end
+		for key, value in pairs(db.questList) do
+			if db.questList[key].text_hover_mode ~= nil then
+				if db.questList[key].appearance == nil then
+					db.questList[key].appearance = {}
+				end
+				db.questList[key].appearance.text_hover_mode = db.questList[key].appearance.text_hover_mode or db.questList[key].text_hover_mode
+				db.questList[key].text_hover_mode = nil
+			end
+		end
+
+		db.version = 2
+	end
 end
 
 ---------------------------------------------------------
@@ -785,21 +1098,133 @@ default_options = {
 							type = "description",
 							order = 0,
 						},
-						progress_width = {
-							type = "range",
-							name = L["ProgressWidth"],
-							desc = L["ProgressWidthTooltip"],
-							min = 0,
-							softMax = 200,
+						general_title = {
+							name = L["General"],
+							type = "header",
 							order = 10,
-							step = 1,
-							get = function(info) return db.defaults and db.defaults.progress_width or DEFAULT_PROGRESS_BAR_WIDTH end,
+						},
+						grouped = {
+							name = L["Grouped"],
+							desc = L["GroupedTooltip"],
+							type = "toggle",
+							order = 20,
+							get = function(info)
+								if db.appearance ~= nil and db.appearance.grouped ~= nil then
+									return db.appearance.grouped
+								end
+								return true
+							end,
 							set = function(info, v)
-								if not db.defaults then
-									db.defaults = {}
+								if not db.appearance then
+									db.appearance = {}
 								end
 
-								db.defaults.progress_width = v
+								db.appearance.grouped = v
+								if v then
+									attachFramesToContainer()
+								else
+									detachFramesFromContainer()
+								end
+							end,
+						},
+						group_title = {
+							name = L["Group"],
+							type = "header",
+							order = 100,
+							hidden = function(info) return db.appearance ~= nil and db.appearance.grouped ~= nil and not db.appearance.grouped end,
+						},
+						x_offset = {
+							name = L["XOffset"],
+							desc = L["XOffsetTooltip"],
+							type = "range",
+							softMin = 0,
+							softMax = 1280,
+							order = 110,
+							step = 1,
+							hidden = function(info) return db.appearance ~= nil and db.appearance.grouped ~= nil and not db.appearance.grouped end,
+							get = function(info) return db.appearance and db.appearance.group and db.appearance.group.x_offset or questContainer:GetLeft() end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.group then
+									db.appearance.group = {}
+								end
+
+								db.appearance.group.x_offset = v
+								setQuestContainerPosition()
+							end,
+						},
+						y_offset = {
+							name = L["YOffset"],
+							desc = L["YOffsetTooltip"],
+							type = "range",
+							softMin = 0,
+							softMax = 720,
+							order = 120,
+							step = 1,
+							hidden = function(info) return db.appearance ~= nil and db.appearance.grouped ~= nil and not db.appearance.grouped end,
+							get = function(info) return db.appearance and db.appearance.group and db.appearance.group.y_offset or questContainer:GetBottom() end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.group then
+									db.appearance.group = {}
+								end
+
+								db.appearance.group.y_offset = v
+								setQuestContainerPosition()
+							end,
+						},
+						separator = {
+							name = L["Separator"],
+							desc = L["SeparatorTooltip"],
+							type = "range",
+							softMin = 0,
+							softMax = 100,
+							order = 130,
+							step = 1,
+							hidden = function(info) return db.appearance ~= nil and db.appearance.grouped ~= nil and not db.appearance.grouped end,
+							get = function(info) return db.appearance and db.appearance.group and db.appearance.group.separator or DEFAULT_QUEST_CONTAINER_SEPARATOR end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.group then
+									db.appearance.group = {}
+								end
+
+								db.appearance.group.separator = v
+								moveQuestsToContainer()
+							end,
+						},
+						defaults_title = {
+							name = L["Defaults"],
+							type = "header",
+							order = 200,
+						},
+						show_name = {
+							name = L["ShowName"],
+							desc = L["ShowNameTooltip"],
+							width = "full",
+							type = "toggle",
+							order = 210,
+							get = function(info, v)
+								if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_name ~= nil then
+									return db.appearance.defaults.show_name
+								end
+								return true
+							end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.defaults then
+									db.appearance.defaults = {}
+								end
+
+								db.appearance.defaults.show_name = v
 								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
 							end,
 						},
@@ -807,20 +1232,190 @@ default_options = {
 							name = L["TextDisplay"],
 							desc = L["TextDisplayTooltip"],
 							type = "select",
-							order = 20,
+							order = 220,
 							values = {
 								["numeric"] = L["Numeric"],
 								["countdown"] = L["Countdown"],
 								["percentage"] = L["Percentage"],
 							},
-							get = function(info) return db.defaults and db.defaults.text_display or "numeric" end,
+							get = function(info) return db.appearance and db.appearance.defaults and db.appearance.defaults.text_display or "numeric" end,
 							set = function(info, v)
-								if not db.defaults then
-									db.defaults = {}
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.defaults then
+									db.appearance.defaults = {}
 								end
 
-								db.defaults.text_display = v
+								db.appearance.defaults.text_display = v
 								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateQuestProgress() end
+							end,
+						},
+						show_value = {
+							name = L["ShowValue"],
+							desc = L["ShowValueTooltip"],
+							width = 0.75,
+							type = "toggle",
+							order = 230,
+							get = function(info, v)
+								if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_value ~= nil then
+									return db.appearance.defaults.show_value
+								end
+								return true
+							end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.defaults then
+									db.appearance.defaults = {}
+								end
+
+								db.appearance.defaults.show_value = v
+								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+							end,
+						},
+						show_maximum = {
+							name = L["ShowMax"],
+							desc = L["ShowMaxTooltip"],
+							width = 0.75,
+							type = "toggle",
+							order = 240,
+							get = function(info, v)
+								if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_maximum ~= nil then
+									return db.appearance.defaults.show_maximum
+								end
+								return true
+							end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.defaults then
+									db.appearance.defaults = {}
+								end
+
+								db.appearance.defaults.show_maximum = v
+								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateQuestProgressFrame() end
+							end,
+						},
+						hover_mode = {
+							name = L["HoverMode"],
+							desc = L["HoverModeTooltip"],
+							width = 0.75,
+							type = "toggle",
+							order = 250,
+							get = function(info, v)
+								if db.appearance ~= nil and db.appearance.defaults ~= nil then
+									return db.appearance.defaults.text_hover_mode
+								end
+								return false
+							end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.defaults then
+									db.appearance.defaults = {}
+								end
+
+								db.appearance.defaults.text_hover_mode = v
+								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateQuestProgressFrame() end
+							end,
+						},
+						show_icon = {
+							name = L["ShowIcon"],
+							desc = L["ShowIconTooltip"],
+							width = "full",
+							type = "toggle",
+							order = 260,
+							get = function(info, v)
+								if db.appearance ~= nil and db.appearance.defaults ~= nil then
+									return db.appearance.defaults.show_icon
+								end
+								return true
+							end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.defaults then
+									db.appearance.defaults = {}
+								end
+
+								db.appearance.defaults.show_icon = v
+								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+							end,
+						},
+						progress_width = {
+							type = "range",
+							name = L["ProgressWidth"],
+							desc = L["ProgressWidthTooltip"],
+							min = 0,
+							softMax = 200,
+							order = 270,
+							step = 1,
+							get = function(info) return db.appearance and db.appearance.defaults and db.appearance.defaults.progress_width or DEFAULT_PROGRESS_BAR_WIDTH end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.defaults then
+									db.appearance.defaults = {}
+								end
+
+								db.appearance.defaults.progress_width = v
+								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+
+								if db.appearance.grouped then
+									setQuestContainerWidth()
+								end
+							end,
+						},
+						show_progress_bar = {
+							name = L["ShowProgressBar"],
+							desc = L["ShowProgressBarTooltip"],
+							type = "toggle",
+							order = 280,
+							get = function(info, v)
+								if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_progress_bar ~= nil then
+									return db.appearance.defaults.show_progress_bar
+								end
+								return true
+							end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.defaults then
+									db.appearance.defaults = {}
+								end
+
+								db.appearance.defaults.show_progress_bar = v
+								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+							end,
+						},
+						merge_name_progress = {
+							name = L["MergeNameProgress"],
+							desc = L["MergeNameProgressTooltip"],
+							type = "toggle",
+							order = 290,
+							get = function(info, v)
+								if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.merge_name_progress ~= nil then
+									return db.appearance.defaults.merge_name_progress
+								end
+								return false
+							end,
+							set = function(info, v)
+								if not db.appearance then
+									db.appearance = {}
+								end
+								if not db.appearance.defaults then
+									db.appearance.defaults = {}
+								end
+
+								db.appearance.defaults.merge_name_progress = v
+								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
 							end,
 						},
 					},
@@ -854,10 +1449,11 @@ quest_template = {
 			end,
 			set = function(info, v)
 				db.questList[info[3]].enabled = v
-				if questVisibilityCheck(info[3]) then
-					showQuestFrame(info[3])
-				else
-					hideQuestFrame(info[3])
+
+				getFrameFromSlot(info[3]):UpdateVisibility()
+
+				if db.appearance and db.appearance.grouped then
+					moveQuestsToContainer()
 				end
 			end,
 		},
@@ -895,6 +1491,7 @@ quest_template = {
 						return new_name or ""
 					end,
 					set = function(info, v)
+						v = v:gsub("||", "|")
 						db.questList[info[3]].name = v ~= "" and v or nil
 						if v ~= "" then
 							options.args.general.args.quests.args[info[3]].name = v
@@ -928,12 +1525,26 @@ quest_template = {
 						return ""
 					end,
 					set = function(info, v)
+						if v == "" then
+							setQuestItem(info[3])
+							return
+						end
+
 						local inputID = tonumber(v)
 						local frame = getFrameFromSlot(info[3])
 
 						if inputID == nil then
 							if getQuestType(info[3]) == "currency" then
-								inputID = C_CurrencyInfo.GetCurrencyIDFromLink(inputID)
+								local _, linkString, _ = ExtractHyperlinkString(v)
+								local linkType, linkID
+								if linkString then
+									linkType, linkID = ExtractLinkData(linkString)
+								else
+									return
+								end
+								if linkType == "currency" then
+									inputID = tonumber(linkID)
+								end
 							else
 								inputID = GetItemInfoInstant(v)
 							end
@@ -945,9 +1556,7 @@ quest_template = {
 
 						setQuestItem(info[3], inputID)
 
-						if questVisibilityCheck(info[3]) then
-							showQuestFrame(info[3])
-						end
+						frame:UpdateVisibility()
 						frame:UpdateItem()
 					end,
 				},
@@ -1024,70 +1633,24 @@ quest_template = {
 					type = "description",
 					order = 0,
 				},
+				reset_appearance = {
+					name = L["ResetAppearance"],
+					desc = L["ResetAppearanceTooltip"],
+					type = "execute",
+					order = 10,
+					disabled = function(info)
+						return db.questList[info[3]].appearance == nil
+					end,
+					func = function(info, v)
+						db.questList[info[3]].appearance = nil
+						getFrameFromSlot(info[3]):FullRefresh()
+					end,
+				},
 				general_title = {
 					name = L["General"],
 					type = "header",
-					order = 10,
-				},
-				progress_width = {
-					name = L["ProgressWidth"],
-					desc = L["ProgressWidthTooltip"],
-					type = "range",
-					min = 0,
-					softMax = 200,
 					order = 20,
-					step = 1,
-					get = function(info) return db.questList[info[3]].appearance and db.questList[info[3]].appearance.progress_width or db.defaults and db.defaults.progress_width or DEFAULT_PROGRESS_BAR_WIDTH end,
-					set = function(info, v)
-						if not db.questList[info[3]].appearance then
-							db.questList[info[3]].appearance = {}
-						end
-
-						db.questList[info[3]].appearance.progress_width = v
-						getFrameFromSlot(info[3]):UpdateFrameSize()
-					end,
-				},
-				reset_progress_width = {
-					name = L["ResetProgressWidth"],
-					desc = L["ResetProgressWidthTooltip"],
-					width = "half",
-					type = "execute",
-					order = 30,
-					disabled = function(info)
-						return db.questList[info[3]].appearance and db.questList[info[3]].appearance.progress_width == nil
-					end,
-					func = function(info, v)
-						if db.questList[info[3]].appearance then
-							db.questList[info[3]].appearance.progress_width = nil
-						end
-						getFrameFromSlot(info[3]):UpdateFrameSize()
-					end,
-				},
-				text_display = {
-					name = L["TextDisplay"],
-					desc = L["TextDisplayTooltip"],
-					type = "select",
-					order = 40,
-					values = {
-						["default"] = L["Default"],
-						["numeric"] = L["Numeric"],
-						["countdown"] = L["Countdown"],
-						["percentage"] = L["Percentage"],
-					},
-					get = function(info) return db.questList[info[3]].appearance and db.questList[info[3]].appearance.text_display or "default" end,
-					set = function(info, v)
-						local frame = getFrameFromSlot(info[3])
-						if not db.questList[info[3]].appearance then
-							db.questList[info[3]].appearance = {}
-						end
-
-						if v == "default" and db.questList[info[3]].appearance.text_display ~= nil then
-							db.questList[info[3]].appearance.text_display = nil
-						else
-							db.questList[info[3]].appearance.text_display = v
-						end
-						frame:UpdateItem()
-					end,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 				},
 				x_offset = {
 					name = L["XOffset"],
@@ -1095,8 +1658,9 @@ quest_template = {
 					type = "range",
 					softMin = 0,
 					softMax = 1280,
-					order = 50,
+					order = 30,
 					step = 1,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 					get = function(info) return db.questList[info[3]].appearance and db.questList[info[3]].appearance.x or getFrameFromSlot(info[3]):GetLeft() end,
 					set = function(info, v)
 						if not db.questList[info[3]].appearance then
@@ -1113,8 +1677,9 @@ quest_template = {
 					type = "range",
 					softMin = 0,
 					softMax = 720,
-					order = 60,
+					order = 40,
 					step = 1,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 					get = function(info) return db.questList[info[3]].appearance and db.questList[info[3]].appearance.y or getFrameFromSlot(info[3]):GetBottom() end,
 					set = function(info, v)
 						if not db.questList[info[3]].appearance then
@@ -1125,11 +1690,31 @@ quest_template = {
 						getFrameFromSlot(info[3]):UpdateFramePosition()
 					end,
 				},
+				progress_width = {
+					name = L["ProgressWidth"],
+					desc = L["ProgressWidthTooltip"],
+					type = "range",
+					min = 0,
+					softMax = 200,
+					order = 50,
+					step = 1,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
+					get = function(info) return db.questList[info[3]].appearance and db.questList[info[3]].appearance.progress_width or db.appearance and db.appearance.defaults and db.appearance.defaults.progress_width or DEFAULT_PROGRESS_BAR_WIDTH end,
+					set = function(info, v)
+						if not db.questList[info[3]].appearance then
+							db.questList[info[3]].appearance = {}
+						end
+
+						db.questList[info[3]].appearance.progress_width = v
+						getFrameFromSlot(info[3]):UpdateFrameSize()
+					end,
+				},
 				anchor = {
 					name = L["Anchor"],
 					desc = L["AnchorTooltip"],
 					type = "select",
-					order = 70,
+					order = 60,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 					values = {
 						["TOPLEFT"] = L["TopLeft"],
 						["TOPRIGHT"] = L["TopRight"],
@@ -1151,7 +1736,8 @@ quest_template = {
 					desc = L["ClampedTooltip"],
 					width = "half",
 					type = "toggle",
-					order = 80,
+					order = 70,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 					get = function(info, v)
 						return db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.clamped_to_screen ~= nil and db.questList[info[3]].appearance.clamped_to_screen or true
 					end,
@@ -1169,18 +1755,70 @@ quest_template = {
 					type = "header",
 					order = 100,
 				},
+				show_name = {
+					name = L["ShowName"],
+					desc = L["ShowNameTooltip"],
+					width = 0.75,
+					type = "toggle",
+					order = 120,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
+					get = function(info, v)
+						if db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.show_name ~= nil then
+							return db.questList[info[3]].appearance.show_name
+						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_name ~= nil then
+                             return db.appearance.defaults.show_name
+						end
+						return true
+					end,
+					set = function(info, v)
+						if not db.questList[info[3]].appearance then
+							db.questList[info[3]].appearance = {}
+						end
+
+						db.questList[info[3]].appearance.show_name = v
+						getFrameFromSlot(info[3]):UpdateFrameSize()
+					end,
+				},
+				text_display = {
+					name = L["TextDisplay"],
+					desc = L["TextDisplayTooltip"],
+					type = "select",
+					order = 110,
+					values = {
+						["default"] = L["Default"],
+						["numeric"] = L["Numeric"],
+						["countdown"] = L["Countdown"],
+						["percentage"] = L["Percentage"],
+					},
+					get = function(info) return db.questList[info[3]].appearance and db.questList[info[3]].appearance.text_display or "default" end,
+					set = function(info, v)
+						local frame = getFrameFromSlot(info[3])
+						if not db.questList[info[3]].appearance then
+							db.questList[info[3]].appearance = {}
+						end
+
+						if v == "default" and db.questList[info[3]].appearance.text_display ~= nil then
+							db.questList[info[3]].appearance.text_display = nil
+						else
+							db.questList[info[3]].appearance.text_display = v
+						end
+						frame:UpdateItem()
+					end,
+				},
 				show_value = {
 					name = L["ShowValue"],
 					desc = L["ShowValueTooltip"],
 					width = 0.75,
 					type = "toggle",
-					order = 110,
+					order = 120,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 					get = function(info, v)
 						if db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.show_value ~= nil then
 							return db.questList[info[3]].appearance.show_value
-						else
-							return true
+						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_maximum ~= nil then
+                             return db.appearance.defaults.show_value
 						end
+						return true
 					end,
 					set = function(info, v)
 						if not db.questList[info[3]].appearance then
@@ -1188,7 +1826,7 @@ quest_template = {
 						end
 
 						db.questList[info[3]].appearance.show_value = v
-						getFrameFromSlot(info[3]):UpdateQuestProgressFrame()
+						getFrameFromSlot(info[3]):UpdateFrameSize()
 					end,
 				},
 				show_maximum = {
@@ -1196,7 +1834,7 @@ quest_template = {
 					desc = L["ShowMaxTooltip"],
 					width = 0.75,
 					type = "toggle",
-					order = 120,
+					order = 130,
 					disabled = function(info)
 						if db.questList[info[3]].appearance ~= nil then
 							if db.questList[info[3]].appearance.show_value ~= nil and not db.questList[info[3]].appearance.show_value then
@@ -1206,17 +1844,18 @@ quest_template = {
 								return db.questList[info[3]].appearance.text_display ~= "numeric"
 							end
 						end
-						if db.defaults ~= nil and db.defaults.text_display ~= nil then
-							return db.defaults.text_display ~= "numeric"
+						if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.text_display ~= nil then
+							return db.appearance.defaults.text_display ~= "numeric"
 						end
 						return false
 					end,
 					get = function(info, v)
 						if db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.show_maximum ~= nil then
 							return db.questList[info[3]].appearance.show_maximum
-						else
-							return true
+						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_maximum ~= nil then
+							return db.appearance.defaults.show_maximum
 						end
+						return true
 					end,
 					set = function(info, v)
 						if not db.questList[info[3]].appearance then
@@ -1227,43 +1866,109 @@ quest_template = {
 						getFrameFromSlot(info[3]):UpdateQuestProgressFrame()
 					end,
 				},
+				show_progress_bar = {
+					name = L["ShowProgressBar"],
+					desc = L["ShowProgressBarTooltip"],
+					width = 0.75,
+					type = "toggle",
+					order = 140,
+                    hidden = function() return db.appearance == nil or db.appearance.grouped end,
+					get = function(info, v)
+						if db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.show_progress_bar ~= nil then
+							return db.questList[info[3]].appearance.show_progress_bar
+						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_progress_bar ~= nil then
+                             return db.appearance.defaults.show_progress_bar
+						end
+						return true
+					end,
+					set = function(info, v)
+						if not db.questList[info[3]].appearance then
+							db.questList[info[3]].appearance = {}
+						end
+
+						db.questList[info[3]].appearance.show_progress_bar = v
+						getFrameFromSlot(info[3]):UpdateFrameSize()
+					end,
+				},
+				merge_name_progress = {
+					name = L["MergeNameProgress"],
+					desc = L["MergeNameProgressTooltip"],
+					type = "toggle",
+					order = 150,
+                    hidden = function() return db.appearance == nil or db.appearance.grouped end,
+					get = function(info, v)
+						if db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.merge_name_progress ~= nil then
+							return db.questList[info[3]].appearance.merge_name_progress
+						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.merge_name_progress ~= nil then
+                             return db.appearance.defaults.merge_name_progress
+						end
+						return false
+					end,
+					set = function(info, v)
+						if not db.questList[info[3]].appearance then
+							db.questList[info[3]].appearance = {}
+						end
+
+						db.questList[info[3]].appearance.merge_name_progress = v
+						for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+					end,
+				},
 				hover_mode = {
 					name = L["HoverMode"],
 					desc = L["HoverModeTooltip"],
 					width = 0.75,
 					type = "toggle",
-					order = 130,
-					disabled = function(info) return db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.show_value ~= nil and not db.questList[info[3]].appearance.show_value or false end,
+					order = 160,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
+					disabled = function(info)
+						return db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.show_value ~= nil and not db.questList[info[3]].appearance.show_value or false end,
 					get = function(info, v)
-						if db.questList[info[3]].text_hover_mode ~= nil then
-							return db.questList[info[3]].text_hover_mode
-						else
-							return false
+						if db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.text_hover_mode ~= nil then
+							return db.questList[info[3]].appearance.text_hover_mode
+						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.text_hover_mode ~= nil then
+							return db.appearance.defaults.text_hover_mode
 						end
+						return false
 					end,
 					set = function(info, v)
-						db.questList[info[3]].text_hover_mode = v
+						if not db.questList[info[3]].appearance then
+							db.questList[info[3]].appearance = {}
+						end
+
+						db.questList[info[3]].appearance.text_hover_mode = v
 						getFrameFromSlot(info[3]):UpdateQuestProgressFrame()
 					end,
 				},
-				--[=[show_name = {
-					name = L["ShowName"],
-					desc = L["ShowNameTooltip"],
+				show_icon = {
+					name = L["ShowIcon"],
+					desc = L["ShowIconTooltip"],
 					width = 0.75,
 					type = "toggle",
-					order = 80,
+					order = 170,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 					get = function(info, v)
-						if db.questList[info[3]].show_name ~= nil then
-							return db.questList[info[3]].show_name
-						else
-							return true
+						if db.questList[info[3]].appearance ~= nil and db.questList[info[3]].appearance.show_icon ~= nil then
+							return db.questList[info[3]].appearance.show_icon
+						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_icon ~= nil then
+							return db.appearance.defaults.show_icon
 						end
+						return true
 					end,
 					set = function(info, v)
-						db.questList[info[3]].show_name = v
-						getFrameFromSlot(info[3]):UpdateQuestProgressFrame()
+						if not db.questList[info[3]].appearance then
+							db.questList[info[3]].appearance = {}
+						end
+
+						db.questList[info[3]].appearance.show_icon = v
+						getFrameFromSlot(info[3]):UpdateFrameSize()
 					end,
-				},]=]--
+				},
+				grouped_hint = {
+					name = "|cFFFFFF00"..L["GroupedHint"].."|r",
+					type = "description",
+					order = 900,
+					hidden = function() return db.appearance ~= nil and not db.appearance.grouped end,
+				},
 			},
 		},
 		filter_options = {
@@ -1501,12 +2206,16 @@ function DropQuests:OnInitialize()
 	local migrate_from = 0
 	if db.version == nil then
 		db.version = DB_VERSION
-	elseif db.version > DB_VERSION then
+	elseif db.version < DB_VERSION then
 		migrate_from = db.version
 		migrateDB(migrate_from)
 	end
 
 	refreshOptions(self)
+
+	if db.appearance == nil or db.appearance.grouped then
+		attachFramesToContainer()
+	end
 
 	self.optionsFrame = {}
 	self.optionsFrame.general = ACDI:AddToBlizOptions(addonName, addonName, nil, "general")
@@ -1519,7 +2228,6 @@ function DropQuests:OnInitialize()
 	HBD.RegisterCallback(self, "PlayerZoneChanged", "OnZoneChanged")
 
 	eventFrame = CreateFrame("Frame")
-
 	eventFrame:SetScript("OnEvent", function(self, event, ...)
 		if event == "DISPLAY_SIZE_CHANGED" then
 			screenWidth = GetScreenWidth()
@@ -1559,20 +2267,25 @@ function DropQuests:OnProfileChanged(event, database, newProfileKey)
 	db = database.profile
 	refreshOptions(self)
 
+	if db.appearance == nil or db.appearance.grouped then
+		attachFramesToContainer()
+	end
+
 	ACR:RegisterOptionsTable(addonName, options)
 	ACR:NotifyChange(addonName)
 
 	refreshQuestFrameVisibility(getZoneFromMap())
+
+	if db.appearance and db.appearance.grouped then
+		moveQuestsToContainer()
+	end
 end
 
 function DropQuests:OnZoneChanged(event, currentPlayerUiMapID, currentPlayerUiMapType)
-	if previousPlayerUiMapID == nil then
-		previousPlayerUiMapID = currentPlayerUiMapID
-		return
-	end
-
 	-- Check each quest to show/hide depending on their filters
 	refreshQuestFrameVisibility(currentPlayerUiMapID)
 
-	previousPlayerUiMapID = currentPlayerUiMapID
+	if db.appearance and db.appearance.grouped then
+		moveQuestsToContainer()
+	end
 end
