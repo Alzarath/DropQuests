@@ -277,7 +277,8 @@ function createQuestFrame(slot_number)
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", startMoving)
 	frame:SetScript("OnDragStop", stopMoving)
-	frame:RegisterEvent(db.questList[slot_number].quest_type ~= nil and db.questList[slot_number].quest_type == "currency" and "CURRENCY_DISPLAY_UPDATE" or "ITEM_PUSH")
+	local event_type = db.questList[slot_number].quest_type ~= nil and db.questList[slot_number].quest_type == "currency" and "CURRENCY_DISPLAY_UPDATE" or "ITEM_PUSH"
+	frame:RegisterEvent(event_type)
 	frame:SetClampedToScreen(db.questList[slot_number].appearance and db.questList[slot_number].appearance.clamped_to_screen or true)
 
 	frame.button = CreateFrame("ItemButton", "questframe_"..slot_number.."_button", frame)
@@ -350,9 +351,8 @@ function createQuestFrame(slot_number)
 				end
 			end
 		elseif (event == "CURRENCY_DISPLAY_UPDATE") then
-			local currency_id = ...
+			local currency_id, _, _, _, _ = ...
 			if db.questList[slot_number].itemID == currency_id then
-				questVars[slot_number].frame_update_queued = true
 				if db.questList[slot_number].filter ~= nil then
 					if db.questList[slot_number].filter.auto_filter_continent ~= nil and db.questList[slot_number].filter.auto_filter_continent then
 						addContinentToFilterList(slot_number)
@@ -361,6 +361,7 @@ function createQuestFrame(slot_number)
 						addZoneToFilterList(slot_number)
 					end
 				end
+				frame:UpdateQuestProgress()
 			end
 		elseif (event == "BAG_UPDATE_DELAYED" and questVars[slot_number].frame_update_queued) then
 			frame:UpdateQuestProgress()
@@ -931,7 +932,7 @@ function setQuestContainerWidth()
 	questContainerWidth = questContainerWidth + DEFAULT_PADDING * 4
 
 	if db.appearance == nil or db.appearance.defaults == nil or db.appearance.defaults.show_icon == nil or db.appearance.defaults.show_icon then
-		if db.appearance == nil or db.appearance.defaults == nil or ((db.appearance.defaults.show_progress_bar == nil or db.appearance.defaults.show_progress_bar or db.appearance.defaults.show_value == nil or db.appearance.defaults.show_value) and db.appearance.defaults.show_name == nil or db.appearance.defaults.show_name) then
+		if db.appearance == nil or db.appearance.defaults == nil or (db.appearance.defaults.merge_name_progress == nil or (db.appearance.defaults.show_progress_bar == nil or db.appearance.defaults.show_progress_bar or db.appearance.defaults.show_value == nil or db.appearance.defaults.show_value) and db.appearance.defaults.show_name == nil or db.appearance.defaults.show_name) then
 			questContainerWidth = questContainerWidth + BUTTON_WIDTH_NORMAL + DEFAULT_PADDING
 		else
 			questContainerWidth = questContainerWidth + BUTTON_WIDTH_SMALL + DEFAULT_PADDING
@@ -1226,6 +1227,10 @@ default_options = {
 
 								db.appearance.defaults.show_name = v
 								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+
+								if db.appearance.grouped then
+									setQuestContainerWidth()
+								end
 							end,
 						},
 						text_display = {
@@ -1273,6 +1278,10 @@ default_options = {
 
 								db.appearance.defaults.show_value = v
 								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+
+								if db.appearance.grouped then
+									setQuestContainerWidth()
+								end
 							end,
 						},
 						show_maximum = {
@@ -1345,6 +1354,10 @@ default_options = {
 
 								db.appearance.defaults.show_icon = v
 								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+
+								if db.appearance.grouped then
+									setQuestContainerWidth()
+								end
 							end,
 						},
 						progress_width = {
@@ -1393,6 +1406,10 @@ default_options = {
 
 								db.appearance.defaults.show_progress_bar = v
 								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+
+								if db.appearance.grouped then
+									setQuestContainerWidth()
+								end
 							end,
 						},
 						merge_name_progress = {
@@ -1416,6 +1433,10 @@ default_options = {
 
 								db.appearance.defaults.merge_name_progress = v
 								for key, _ in pairs(db.questList) do getFrameFromSlot(key):UpdateFrameSize() end
+
+								if db.appearance.grouped then
+									setQuestContainerWidth()
+								end
 							end,
 						},
 					},
@@ -1535,10 +1556,11 @@ quest_template = {
 
 						if inputID == nil then
 							if getQuestType(info[3]) == "currency" then
-								local _, linkString, _ = ExtractHyperlinkString(v)
-								local linkType, linkID
-								if linkString then
-									linkType, linkID = ExtractLinkData(linkString)
+								--local hasPreString, preString, linkString, postString = ExtractHyperlinkString(v)
+								local linkType, linkOptions, _ = LinkUtil.ExtractLink(v)
+								local linkID
+								if linkOptions then
+									linkID, amount = ExtractLinkData(linkOptions)
 								else
 									return
 								end
@@ -1579,7 +1601,7 @@ quest_template = {
 						if v == "currency" then
 							frame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
 						else
-							frame:UnregisterEvent("ITEM_PUSH")
+							frame:RegisterEvent("ITEM_PUSH")
 						end
 						frame:UpdateQuestProgress()
 					end,

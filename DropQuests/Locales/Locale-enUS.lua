@@ -101,6 +101,7 @@ L["QuestAppearanceSettingsTooltip"] = "Settings affecting the quest frame's visu
 L["QuestAppearanceSettingsDescription"] = "These settings control the look and feel of the quest frame."
 
 L["General"] = true
+L["Defaults"] = true
 L["Frame"] = true
 L["Text"] = true
 
@@ -109,7 +110,6 @@ L["Numeric"] = true
 L["Countdown"] = true
 L["Percentage"] = true
 
-L["Defaults"] = "Defaults"
 L["ProgressWidth"] = "Width"
 L["ProgressWidthTooltip"] = "The width of the progress bar in pixels.\n\n|cFFFFFF000|r hides the bar entirely and displays the quantity on the icon."
 
