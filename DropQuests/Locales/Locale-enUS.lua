@@ -5,6 +5,9 @@ local L = LibStub("AceLocale-3.0"):NewLocale("DropQuests", "enUS", true)
 
 L["DropQuests"] = true
 
+L["QuestDefaultSettings"] = "Defaults"
+L["QuestDefaultSettingsTooltip"] = "Settings affecting all quests"
+
 L["EnableDropQuests"] = "Enable DropQuests"
 L["EnableDropQuestsTooltip"] = "Enable or disable DropQuests"
 
@@ -55,6 +58,9 @@ L["ShowNameTooltip"] = "Displays the item name"
 L["MergeNameProgress"] = "Merge Name/Progress"
 L["MergeNameProgressTooltip"] = "Display the name on the same line as the progress bar"
 
+L["ProgressBarTexture"] = "Progress Bar Texture"
+L["ProgressBarTextureTooltip"] = "Change the texture of the progress bar"
+
 L["UseBank"] = "Use Bank"
 L["UseBankTooltip"] = "Include items from the character's bank and reagent bank in the item progress"
 
@@ -87,9 +93,9 @@ L["FilterTypeTooltip"] = "Determines what effect the filters have on the visibil
 L["Whitelist"] = true
 L["Blacklist"] = true
 
-L["AppearanceSettings"] = "Appearance"
-L["AppearanceSettingsTooltip"] = "Settings affecting all quests' visuals"
-L["AppearanceSettingsDescription"] = "These settings control the look and feel of DropQuests globally."
+L["QuestDefaultSettings"] = "Defaults"
+L["QuestDefaultSettingsTooltip"] = "Settings affecting all quests"
+L["QuestDefaultSettingsDescription"] = "These settings control the default look and feel of DropQuests"
 
 L["Group"] = true
 L["Grouped"] = true
