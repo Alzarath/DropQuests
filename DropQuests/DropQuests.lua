@@ -312,6 +312,24 @@ function DropQuests:SetQuestItem(slot_number, itemID)
 	ACR:NotifyChange(addonName)
 end
 
+function DropQuests:GetQuestType(slot_number)
+	return db.questList[slot_number].quest_type ~= nil and db.questList[slot_number].quest_type or "item"
+end
+
+function DropQuests:GetQuestName(slot_number)
+	local returned_name = db.questList[slot_number].name
+	if returned_name == nil and db.questList[slot_number].itemID then
+		if DropQuests:GetQuestType(slot_number) == "currency" then
+			local currencyInfo = C_CurrencyInfo.GetBasicCurrencyInfo(db.questList[slot_number].itemID)
+
+			if currencyInfo then returned_name = currencyInfo.name end
+		elseif db.questList[slot_number].itemID then
+			returned_name = GetItemInfo(db.questList[slot_number].itemID)
+		end
+	end
+	return returned_name
+end
+
 ---------------------------------------------------------
 -- Option Functions
 
@@ -426,7 +444,8 @@ function DropQuests:CreateQuestFrame(slot_number)
 	frame:RegisterForDrag("LeftButton")
 	frame:SetScript("OnDragStart", startMoving)
 	frame:SetScript("OnDragStop", stopMoving)
-	local event_type = db.questList[slot_number].quest_type ~= nil and db.questList[slot_number].quest_type == "currency" and "CURRENCY_DISPLAY_UPDATE" or "ITEM_PUSH"
+	local quest_type = DropQuests:GetQuestType(slot_number)
+	local event_type = quest_type ~= nil and quest_type == "currency" and "CURRENCY_DISPLAY_UPDATE" or "ITEM_PUSH"
 	frame:RegisterEvent(event_type)
 	frame:SetClampedToScreen(db.questList[slot_number].appearance and db.questList[slot_number].appearance.clamped_to_screen or true)
 
@@ -732,6 +751,8 @@ function DropQuests:CreateQuestFrame(slot_number)
 		local show_value = true
 		local show_maximum = true
 		local show_icon = true
+		local use_currency_maximum = false
+
 		if db.appearance == nil or db.appearance.grouped then
 			if db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_value ~= nil then
 				show_value = db.appearance.defaults.show_value
@@ -752,9 +773,13 @@ function DropQuests:CreateQuestFrame(slot_number)
 			end
 		end
 
+		if db.questList[slot_number].use_currency_maximum ~= nil then
+			use_currency_maximum = db.questList[slot_number].use_currency_maximum
+		end
+
 		if db.questList[slot_number].appearance ~= nil and db.questList[slot_number].appearance.show_maximum ~= nil then
 			show_maximum = db.questList[slot_number].appearance.show_maximum
-		elseif db.questList[slot_number].goal == nil or db.questList[slot_number].goal == 0 then
+		elseif (db.questList[slot_number].goal == nil or db.questList[slot_number].goal == 0) and not use_currency_maximum then
 			show_maximum = false
 		elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_maximum ~= nil then
 			show_maximum = db.appearance.defaults.show_maximum
@@ -763,15 +788,22 @@ function DropQuests:CreateQuestFrame(slot_number)
 		local itemCount = value or 0
 		local itemGoal = db.questList[slot_number].goal or 0
 
-		if value == nil and db.questList[slot_number].itemID ~= nil then
-			if DropQuests:GetQuestType(slot_number) == "currency" then
+		if db.questList[slot_number].itemID ~= nil then
+			if value == nil then
+				if DropQuests:GetQuestType(slot_number) == "currency" then
+					local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(db.questList[slot_number].itemID)
+					if currencyInfo then itemCount = currencyInfo.quantity end
+				else
+					itemCount = GetItemCount(db.questList[slot_number].itemID, use_bank, false, use_bank) or 0
+				end
+			end
+			if use_currency_maximum then
 				local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(db.questList[slot_number].itemID)
-				if currencyInfo then itemCount = currencyInfo.quantity end
-			else
-				itemCount = GetItemCount(db.questList[slot_number].itemID, use_bank, false, use_bank) or 0
+				itemGoal = currencyInfo.maxQuantity or itemGoal
 			end
 		end
 
+		frame.StatusBar:SetMinMaxValues(0, itemGoal)
 		frame.StatusBar:SetValue(math.min(itemCount, itemGoal))
 
 		if show_value then
@@ -813,6 +845,7 @@ function DropQuests:CreateQuestFrame(slot_number)
 		local show_value = true
 		local hover_mode = false
 		local progress_bar_texture = DEFAULT_PROGRESS_BAR_TEXTURE
+
 		if db.appearance ~= nil and db.appearance.grouped then
 			if db.appearance.defaults ~= nil then
 				if db.appearance.defaults.show_value ~= nil then
@@ -844,7 +877,6 @@ function DropQuests:CreateQuestFrame(slot_number)
 			frame.progress_text:SetDrawLayer(hover_mode and "HIGHLIGHT" or "OVERLAY")
 		end
 
-		frame.StatusBar:SetMinMaxValues(0, db.questList[slot_number].goal or 1)
 		frame.StatusBar:SetStatusBarTexture(LSM:Fetch("statusbar", progress_bar_texture))
 
 		--frame.name:SetShown(show_name)
@@ -1659,13 +1691,14 @@ quest_template = {
 					desc = L["QuestGoalTooltip"],
 					type = "input",
 					order = 50,
+					disabled = function(info) return db.questList[info[2]].use_currency_maximum ~= nil and db.questList[info[2]].use_currency_maximum end,
 					validate = function(info, v)
 						if tonumber(v) == nil then
 							return "|cffff0000Error:|r Must be a number"
 						end
 						return true
 					end,
-					get = function(info, v)
+					get = function(info)
 						return db.questList[info[2]].goal and tostring(db.questList[info[2]].goal) or "0"
 					end,
 					set = function(info, v)
@@ -1677,8 +1710,9 @@ quest_template = {
 					name = L["UseBank"],
 					desc = L["UseBankTooltip"],
 					type = "toggle",
+					hidden = function(info) return db.questList[info[2]].quest_type ~= nil and db.questList[info[2]].quest_type ~= "item" end,
 					order = 60,
-					get = function(info, v)
+					get = function(info)
 						if db.questList[info[2]].use_bank ~= nil then
 							return db.questList[info[2]].use_bank
 						else
@@ -1687,6 +1721,24 @@ quest_template = {
 					end,
 					set = function(info, v)
 						db.questList[info[2]].use_bank = v
+						DropQuests:GetFrameFromSlot(info[2]):UpdateQuestProgressFrame()
+					end,
+				},
+				use_currency_maximum = {
+					name = L["UseCurrencyMaximum"],
+					desc = L["UseCurrencyMaximumTooltip"],
+					type = "toggle",
+					hidden = function(info) return db.questList[info[2]].quest_type == nil or db.questList[info[2]].quest_type ~= "currency" end,
+					order = 60,
+					get = function(info)
+						if db.questList[info[2]].use_currency_maximum ~= nil then
+							return db.questList[info[2]].use_currency_maximum
+						else
+							return false
+						end
+					end,
+					set = function(info, v)
+						db.questList[info[2]].use_currency_maximum = v
 						DropQuests:GetFrameFromSlot(info[2]):UpdateQuestProgressFrame()
 					end,
 				},

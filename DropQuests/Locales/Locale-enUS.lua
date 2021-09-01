@@ -64,6 +64,9 @@ L["ProgressBarTextureTooltip"] = "Change the texture of the progress bar"
 L["UseBank"] = "Use Bank"
 L["UseBankTooltip"] = "Include items from the character's bank and reagent bank in the item progress"
 
+L["UseCurrencyMaximum"] = "Use Max Currency"
+L["UseCurrencyMaximumTooltip"] = "Use the Currency's maximum amount as the goal"
+
 L["Filters"] = true
 L["FiltersTooltip"] = "Conditional display settings"
 L["FiltersDescription"] = "Conditionally enable/disable quests based on certain criteria."
