@@ -77,16 +77,15 @@ function DropQuests:GetEmptyIndex(checked_table, maximum_items)
 	local maximum_items = maximum_items or -1
 	local index = 1
 
-	if checked_table == nil then
+	if checked_table == nil or checked_table[tostring(index)] == nil then
 		return index
 	end
 
-	while checked_table[tostring(index)] == nil do
-		if checked_table[index] == nil then
+	while index ~= maximum_items do
+		index = index + 1
+		if checked_table[tostring(index)] == nil then
 			return index
 		end
-		index = index + 1
-		if index == maximum_items then break end
 	end
 
 	return nil
@@ -1129,7 +1128,7 @@ default_options = {
 			type = "execute",
 			order = 10,
 			func = function(info, v)
-				local quest_slot = DropQuests:GetEmptyIndex(db.questList)
+				local quest_slot = tostring(DropQuests:GetEmptyIndex(db.questList))
 				DropQuests:AddQuestToSlot(quest_slot)
 				ACDI:SelectGroup(addonName, "quests", quest_slot)
 			end,
