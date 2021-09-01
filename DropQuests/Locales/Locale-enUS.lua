@@ -7,6 +7,7 @@ L["DropQuests"] = true
 
 L["QuestDefaultSettings"] = "Defaults"
 L["QuestDefaultSettingsTooltip"] = "Settings affecting all quests"
+L["QuestDefaultSettingsDescription"] = "These settings control the default look and feel of DropQuests"
 
 L["EnableDropQuests"] = "Enable DropQuests"
 L["EnableDropQuestsTooltip"] = "Enable or disable DropQuests"
@@ -95,10 +96,6 @@ L["FilterTypeTooltip"] = "Determines what effect the filters have on the visibil
 
 L["Whitelist"] = true
 L["Blacklist"] = true
-
-L["QuestDefaultSettings"] = "Defaults"
-L["QuestDefaultSettingsTooltip"] = "Settings affecting all quests"
-L["QuestDefaultSettingsDescription"] = "These settings control the default look and feel of DropQuests"
 
 L["Group"] = true
 L["Grouped"] = true
