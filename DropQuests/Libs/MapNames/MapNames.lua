@@ -2,6 +2,10 @@
 MapNames
 ]]
 
+-- If you're reading this, this is a library designed for DropQuests with limited functionality.
+-- It may or may not be released in the future. But if you have more ideas for overrides, feel
+-- free to suggest them in DropQuests for the time being!
+
 local MAJOR, MINOR = "MapNames", 1
 local MapNames, oldVersion = LibStub:NewLibrary(MAJOR, MINOR)
 
@@ -15,7 +19,8 @@ local MapOverrides = {
 	[1673] = { ["name"] = "The Crucible (Oribos)", },
 }
 
-MapNames.MapNameTable = {}
+MapNames.MapNameTable = MapNameTable or {}
+
 local MapNameTable = MapNames.MapNameTable
 
 local function StripNonAlphaNumeric(string)
@@ -268,4 +273,12 @@ end
 -- @return The map ID for the map that matches the type or nil.
 function MapNames:GetOrphanFromMap(uiMapID, forceParentsHaveType)
 	return MapNames:GetMapOfTypeFromMap(Enum.UIMapType.Orphan, uiMapID, forceParentsHaveType)
+end
+
+-----------------
+-- Initialization
+-----------------
+
+if #MapNameTable == 0 then
+	MapNameTable = MapNames:GenerateMapNameTables()
 end

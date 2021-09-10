@@ -59,8 +59,7 @@ local screenHeight = GetScreenHeight()
 
 local questContainer
 
-DropQuests.MapNameIDs = {}
-local MapNameIDs = DropQuests.MapNameIDs
+local MapNameIDs = MN.MapNameTable
 
 --------------------------
 -- Database initialization
@@ -2488,10 +2487,6 @@ function DropQuests:OnInitialize()
 	elseif db.version < DB_VERSION then
 		migrate_from = db.version
 		DropQuests:MigrateDB(migrate_from)
-	end
-
-	if next(MapNameIDs) == nil then
-		MapNameIDs = MN:GenerateMapNameTables()
 	end
 
 	questContainer = DropQuests:CreateQuestContainer(0)
