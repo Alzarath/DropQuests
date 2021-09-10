@@ -311,7 +311,7 @@ function DropQuests:RefreshOptions()
 		DropQuests:InitializeQuestSlotOptions(key)
 		local questOptions = options.args.quests.args[key]
 
-		questOptions.name = DropQuests:GetQuestName(key) or "New Quest"
+		DropQuests:UpdateQuestOptionName(key)
 		DropQuests:InitializeQuestVars(key)
 	end
 
@@ -328,6 +328,22 @@ end
 function DropQuests:UpdateQuestSlotOptions(slot_number)
 	options.args.quests.args[slot_number].args.appearance_options.args.x_offset.softMax = math.floor(screenWidth + 0.5)
 	options.args.quests.args[slot_number].args.appearance_options.args.y_offset.softMax = math.floor(screenHeight + 0.5)
+end
+
+function DropQuests:UpdateQuestOptionName(slot_number)
+	local name = DropQuests:GetQuestName(slot_number)
+	if name == nil then
+		local quest_type = DropQuests:GetQuestType(slot_number)
+		if quest_type == "item" then
+			local item = Item:CreateFromItemID(db.questList[slot_number].itemID)
+
+			item:ContinueOnItemLoad(function()
+				options.args.quests.args[slot_number].name = DropQuests:GetQuestName(slot_number) or "Invalid"
+			end)
+		end
+	else
+		options.args.quests.args[slot_number].name = name
+	end
 end
 
 ---------------------
@@ -1568,12 +1584,12 @@ quest_template = {
 					type = "input",
 					order = 30,
 					get = function(info, v)
-						local new_name = DropQuests:GetQuestName(info[2])
+						local name = DropQuests:GetQuestName(info[2])
 
-						options.args.quests.args[info[2]].name = new_name or "New Quest"
+						options.args.quests.args[info[2]].name = name or "New Quest"
 
 						ACR:NotifyChange(addonName)
-						return new_name or ""
+						return name or ""
 					end,
 					set = function(info, v)
 						v = v:gsub("||", "|")

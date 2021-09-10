@@ -20,7 +20,7 @@ L["Quest"] = true
 L["QuestOptionsDescription"] = "These settings allow you to modify a quest."
 
 L["DeleteQuest"] = "Delete"
-L["DeleteQuestTooltip"] = "Deletes the quest entirely. Can not be undone.\n\nHold |cFFFFFF00Shift|r to bypass the confirm dialog."
+L["DeleteQuestTooltip"] = "Deletes the selected quest entirely. Can not be undone.\n\nHold |cFFFFFF00Shift|r to bypass the confirm dialog."
 L["DeleteQuestConfirmDialog"] = "This will delete the quest. Are you sure?"
 
 L["QuestAdd"] = "New Quest"
@@ -160,7 +160,5 @@ L["Clamped"] = true
 L["ClampedTooltip"] = "Clamps the frame to the screen"
 
 L["Profiles"] = true
-
-L["MoveHint"] = "|cFF00FF00Hint: |cffeda55fCtrl+Shift+LeftDrag|cFF00FF00 to move the pane"
 
 -- vim: ts=4 noexpandtab
