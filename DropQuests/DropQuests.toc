@@ -6,12 +6,10 @@
 ## DefaultState: enabled
 ## X-Category: Map
 ## X-eMail: artanis186 @ gmail DOT com
-## OptionalDeps: Ace3
-## X-Curse-Project-ID: 14154
-## X-WoWI-ID: 15716
+## X-Curse-Project-ID: 520084
+## OptionalDeps: TomTom
 
 ## LoadManagers: AddonLoader
-## X-LoadOn-Always: delayed
 
 ## SavedVariablesPerCharacter: DropQuestsDB
 
@@ -26,8 +24,12 @@ Libs\AceDB-3.0\AceDB-3.0.xml
 Libs\AceDBOptions-3.0\AceDBOptions-3.0.xml
 Libs\AceEvent-3.0\AceEvent-3.0.xml
 Libs\AceGUI-3.0\AceGUI-3.0.xml
+Libs\AceGUI-3.0-SharedMediaWidgets\widget.xml
+Libs\AceGUI-3.0-ActionSlotWidgets\widget.xml
 Libs\AceLocale-3.0\AceLocale-3.0.xml
+Libs\MultiSelect\MultiSelect.xml
 Libs\HereBeDragons\HereBeDragons-2.0.lua
+Libs\MapNames\MapNames.lua
 #@end-no-lib-strip@
 
 # Locale files

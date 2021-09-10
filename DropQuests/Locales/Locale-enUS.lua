@@ -20,7 +20,7 @@ L["Quest"] = true
 L["QuestOptionsDescription"] = "These settings allow you to modify a quest."
 
 L["DeleteQuest"] = "Delete"
-L["DeleteQuestTooltip"] = "Deletes the quest entirely. Can not be undone."
+L["DeleteQuestTooltip"] = "Deletes the quest entirely. Can not be undone.\n\nHold |cFFFFFF00Shift|r to bypass the confirm dialog."
 L["DeleteQuestConfirmDialog"] = "This will delete the quest. Are you sure?"
 
 L["QuestAdd"] = "New Quest"
@@ -65,7 +65,7 @@ L["ProgressBarTextureTooltip"] = "Change the texture of the progress bar"
 L["UseBank"] = "Use Bank"
 L["UseBankTooltip"] = "Include items from the character's bank and reagent bank in the item progress"
 
-L["UseCurrencyMaximum"] = "Use Max Currency"
+L["UseCurrencyMaximum"] = "Use Currency Max"
 L["UseCurrencyMaximumTooltip"] = "Use the Currency's maximum amount as the goal"
 
 L["Filters"] = true
@@ -78,18 +78,26 @@ L["AutoFilterZoneTooltip"] = "Automatically add the current zone to the quest's 
 L["AutoFilterContinent"] = "Auto Filter"
 L["AutoFilterContinentTooltip"] = "Automatically add the current continent to the quest's filter list when its item is picked up"
 
-L["FilterContinent"] = "Continents"
-L["FilterZone"] = "Zones"
+L["Continents"] = true
+L["Continent"] = true
+L["Zones"] = true
+L["Zone"] = true
+
+L["FilterContinentInputTooltip"] = "Enter a continent ID or name"
 
 L["FilterContinentAdd"] = "Add"
 L["FilterContinentAddTooltip"] = "Add current continent to the filter list"
 L["FilterContinentRemove"] = "Remove"
 L["FilterContinentRemoveTooltip"] = "Remove current continent from the filter list"
+L["FilterContinentRemoveSelectedTooltip"] = "Remove selected continent from the filter list"
+
+L["FilterZoneInputTooltip"] = "Enter a zone ID or name"
 
 L["FilterZoneAdd"] = "Add"
 L["FilterZoneAddTooltip"] = "Add current zone to the filter list"
 L["FilterZoneRemove"] = "Remove"
 L["FilterZoneRemoveTooltip"] = "Remove current zone from the filter list"
+L["FilterZoneRemoveSelectedTooltip"] = "Remove selected zone from the filter list"
 
 L["FilterType"] = "Filter Type"
 L["FilterTypeTooltip"] = "Determines what effect the filters have on the visibility of the quest.\n\nWhitelist: Quest is only visible while the conditions are met.\nBlacklist: Quest is not visible while the conditions are met."

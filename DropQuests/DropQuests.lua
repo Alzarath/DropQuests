@@ -2,8 +2,10 @@
 DropQuests
 ]]
 
----------------------------------------------------------
+----------------------
 -- Library declaration
+----------------------
+
 local ACE = LibStub("AceAddon-3.0")
 local ACDB = LibStub("AceDB-3.0")
 local ACDI = LibStub("AceConfigDialog-3.0")
@@ -12,10 +14,13 @@ local ACR = LibStub("AceConfigRegistry-3.0")
 local ACO = LibStub("AceDBOptions-3.0")
 local HBD = LibStub("HereBeDragons-2.0")
 local LSM = LibStub("LibSharedMedia-3.0")
+local MN = LibStub("MapNames")
 local WidgetLists = AceGUIWidgetLSMlists
 
----------------------------------------------------------
+--------------------
 -- Addon declaration
+--------------------
+
 local addonName = "DropQuests"
 local addonDisplayName = "|cFFFF9933"..addonName.."|r"
 DropQuests = ACE:NewAddon(addonName, "AceConsole-3.0", "AceEvent-3.0")
@@ -23,13 +28,16 @@ local DropQuests = DropQuests
 local L = LibStub("AceLocale-3.0"):GetLocale(addonName, false)
 local DB_VERSION = 2
 
----------------------------------------------------------
--- Localize some globals
+----------------------
+-- Global localization
+----------------------
+
 local pairs, next, type = pairs, next, type
 local CreateFrame = CreateFrame
 
----------------------------------------------------------
+-----------------------
 -- Variable declaration
+-----------------------
 
 -- Constants
 local MAX_QUESTS = 200
@@ -41,7 +49,9 @@ local DEFAULT_PROGRESS_BAR_TEXTURE = "Blizzard"
 local BUTTON_WIDTH_SMALL = 18.5
 local BUTTON_WIDTH_NORMAL = 37
 
+-- Session variables
 local questVars = {}
+local containerVars = {}
 local eventFrame
 
 local screenWidth = GetScreenWidth()
@@ -49,8 +59,13 @@ local screenHeight = GetScreenHeight()
 
 local questContainer
 
----------------------------------------------------------
--- Database initialization and defaults
+DropQuests.MapNameIDs = {}
+local MapNameIDs = DropQuests.MapNameIDs
+
+--------------------------
+-- Database initialization
+--------------------------
+
 local db
 local options
 local defaults = {
@@ -64,8 +79,9 @@ local defaults = {
 	},
 }
 
----------------------------------------------------------
+---------------------
 -- General Functions
+---------------------
 
 function DropQuests:CountUsedIndices(checked_table)
 	local count = 0
@@ -101,73 +117,9 @@ function DropQuests:CopyTable(obj, seen)
 	return res
 end
 
----------------------------------------------------------
--- Map Functions
-
-function DropQuests:GetContinentFromMap(uiMapID)
-	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
-	if uiMapID == nil then return nil end
-	local mapInfo = C_Map.GetMapInfo(uiMapID)
-
-	if mapInfo.mapType == Enum.UIMapType.Continent then
-		return uiMapID
-	end
-
-	-- Track old map information so we can assume continent-less maps are continents themselves
-	local oldMapID
-	local oldMapInfo
-
-	while mapInfo.mapType > Enum.UIMapType.Continent do
-		oldMapID = uiMapID
-		oldMapInfo = mapInfo
-		uiMapID = mapInfo.parentMapID
-		mapInfo = C_Map.GetMapInfo(uiMapID)
-
-		if mapInfo.mapType == Enum.UIMapType.Continent then
-			return uiMapID
-		-- Assume maps without a parent continent are themselves a continent
-		elseif mapInfo.mapType < Enum.UIMapType.Continent then
-			return oldMapID
-		end
-	end
-
-	-- Map is too abstract. Can't do anything with it.
-	return nil
-end
-
-function DropQuests:GetZoneFromMap(uiMapID)
-	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
-	if uiMapID == nil then return nil end
-	local mapInfo = C_Map.GetMapInfo(uiMapID)
-
-	if mapInfo.mapType == Enum.UIMapType.Zone then
-		return uiMapID
-	end
-
-	-- Track old map information so we can assume zone-less maps are zones themselves
-	local oldMapID
-	local oldMapInfo
-
-	while mapInfo.mapType > Enum.UIMapType.Zone do
-		oldMapID = uiMapID
-		oldMapInfo = mapInfo
-		uiMapID = mapInfo.parentMapID
-		mapInfo = C_Map.GetMapInfo(uiMapID)
-
-		if mapInfo.mapType == Enum.UIMapType.Zone then
-			return uiMapID
-		-- Assume maps without a parent zone are themselves a zone
-		elseif mapInfo.mapType < Enum.UIMapType.Zone then
-			return oldMapID
-		end
-	end
-
-	-- Map is too abstract. Can't do anything with it.
-	return nil
-end
-
----------------------------------------------------------
+------------------
 -- Quest Functions
+------------------
 
 function DropQuests:AddQuestToSlot(slot_number)
 	DropQuests:InitializeQuestSlotOptions(slot_number)
@@ -191,8 +143,10 @@ end
 function DropQuests:AddZoneToFilterList(slot_number, uiMapID)
 	local frame = DropQuests:GetFrameFromSlot(slot_number)
 	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
+	local zone = MN:GetZoneFromMap(uiMapID, true)
 
-	local zone = DropQuests:GetZoneFromMap(uiMapID)
+	-- Do not attempt to add a map that is not a zone
+	if not zone then return nil end
 
 	if db.questList[slot_number].filter == nil then
 		db.questList[slot_number].filter = {}
@@ -211,7 +165,10 @@ function DropQuests:AddContinentToFilterList(slot_number, uiMapID)
 	local frame = DropQuests:GetFrameFromSlot(slot_number)
 	local uiMapID = uiMapID or C_Map.GetBestMapForUnit("player")
 
-	local continent = DropQuests:GetContinentFromMap(uiMapID)
+	local continent = MN:GetContinentFromMap(uiMapID, true)
+
+	-- Do not attempt to add a map that is not a continent
+	if not continent then return nil end
 
 	if db.questList[slot_number].filter == nil then
 		db.questList[slot_number].filter = {}
@@ -232,6 +189,7 @@ function DropQuests:InitializeQuestVars(slot_number)
 	questVars[slot_number].frame_update_queued = false
 	questVars[slot_number].complete = db.questList[slot_number].goal == nil or (GetItemCount(db.questList[slot_number].itemID) >= db.questList[slot_number].goal)
 	questVars[slot_number].frame = DropQuests:CreateQuestFrame(slot_number)
+	questVars[slot_number].selected = nil
 end
 
 -- Returns true if the quest should be visible
@@ -248,8 +206,8 @@ function DropQuests:QuestVisibilityCheck(slot_number, currentPlayerUiMapID)
 
 	currentPlayerUiMapID = currentPlayerUiMapID or C_Map.GetBestMapForUnit("player")
 
-	local currentContinent = tostring(DropQuests:GetContinentFromMap(currentPlayerUiMapID))
-	local currentZone = tostring(DropQuests:GetZoneFromMap(currentPlayerUiMapID))
+	local currentContinent = tostring(MN:GetContinentFromMap(currentPlayerUiMapID, true))
+	local currentZone = tostring(MN:GetZoneFromMap(currentPlayerUiMapID, true))
 
 	local quest = db.questList[slot_number]
 
@@ -299,6 +257,7 @@ end
 
 function DropQuests:SetQuestItem(slot_number, itemID)
 	if itemID == nil then
+		db.questList[slot_number].itemID = nil
 		return
 	end
 
@@ -329,8 +288,15 @@ function DropQuests:GetQuestName(slot_number)
 	return returned_name
 end
 
----------------------------------------------------------
+-- Initializes session-based variables for a container
+function DropQuests:InitializeContainerVars(slot_number)
+	containerVars[slot_number] = {}
+	containerVars[slot_number].frame = DropQuests:CreateQuestContainer(slot_number)
+end
+
+-------------------
 -- Option Functions
+-------------------
 
 function DropQuests:RefreshOptions()
 	options = DropQuests:CopyTable(default_options)
@@ -365,8 +331,9 @@ function DropQuests:UpdateQuestSlotOptions(slot_number)
 	options.args.quests.args[slot_number].args.appearance_options.args.y_offset.softMax = math.floor(screenHeight + 0.5)
 end
 
----------------------------------------------------------
+---------------------
 -- Database Functions
+---------------------
 
 function DropQuests:MigrateDB(migrate_version)
 	print(addonDisplayName..":", "Migrating database from DB", "v"..migrate_version, "to", "v"..DB_VERSION)
@@ -408,8 +375,9 @@ function DropQuests:InitializeDatabaseWithQuest(slot_number)
 	db.questList[slot_number].disabled = false
 end
 
----------------------------------------------------------
+------------------
 -- Frame Functions
+------------------
 
 function DropQuests:CreateQuestFrame(slot_number)
 	local frame = CreateFrame("Frame", "questframe_"..slot_number, UIParent, "StatusTrackingBarTemplate")
@@ -437,7 +405,6 @@ function DropQuests:CreateQuestFrame(slot_number)
 		ACR:NotifyChange(addonName)
 	end
 
-	frame:Show()
 	frame:EnableMouse(true)
 	frame:SetMovable(true)
 	frame:RegisterForDrag("LeftButton")
@@ -551,7 +518,7 @@ function DropQuests:CreateQuestFrame(slot_number)
 		return true
 	end
 
-	 function frame:UpdateItem()
+	function frame:UpdateItem()
 		if db.questList[slot_number].itemID == nil then
 			return nil
 		end
@@ -901,53 +868,70 @@ function DropQuests:CreateQuestFrame(slot_number)
 		return frame:IsVisible()
 	end
 
-	frame:Hide()
-
 	return frame
 end
 
 function DropQuests:CreateQuestContainer(slot_number)
-	local questContainer = CreateFrame("Frame", "questframe_container_default", UIParent)
+	local frame = CreateFrame("Frame", "questframe_container_default", UIParent)
 
-	questContainer:SetPoint("CENTER")
-	questContainer:SetClampedToScreen(true)
-	questContainer:RegisterForDrag("LeftButton")
-	questContainer:EnableMouse(true)
-	questContainer:SetMovable(true)
-	questContainer:SetScript("OnDragStart", function() startMovingQuestContainer() end)
-	questContainer:SetScript("OnDragStop", function() stopMovingQuestContainer() end)
+	frame:SetPoint("CENTER")
+	frame:SetClampedToScreen(true)
+	frame:RegisterForDrag("LeftButton")
+	frame:EnableMouse(true)
+	frame:SetMovable(true)
+	frame:SetScript("OnDragStart", function() startMovingQuestContainer() end)
+	frame:SetScript("OnDragStop", function() stopMovingQuestContainer() end)
 
-	-- function questContainer:UpdateFramePosition(x, y)
-	-- 	questContainer:ClearAllPoints()
+	function frame:UpdateFrameWidth()
+		local width = db.containerList[slot_number].appearance and db.containerList[slot_number].appearance.width
+				   or db.appearance and db.appearance.defaults and db.appearance.defaults.progress_width
+				   or DEFAULT_PROGRESS_BAR_WIDTH
+		width = width + DEFAULT_PADDING * 4
 
-	-- 	-- TODO: Quest -> Container
-	-- 	if (db.questList[slot_number].appearance == nil or db.questList[slot_number].appearance.x == nil or db.questList[slot_number].appearance.y == nil) and (x == nil or y == nil) then
-	-- 		questContainer:SetPoint("CENTER")
-	-- 		return
-	-- 	end
+		if db.appearance == nil or db.appearance.defaults == nil or db.appearance.defaults.show_icon == nil or db.appearance.defaults.show_icon then
+			if db.appearance == nil or db.appearance.defaults == nil or (db.appearance.defaults.merge_name_progress == nil or (db.appearance.defaults.show_progress_bar == nil or db.appearance.defaults.show_progress_bar or db.appearance.defaults.show_value == nil or db.appearance.defaults.show_value) and db.appearance.defaults.show_name == nil or db.appearance.defaults.show_name) then
+				width = width + BUTTON_WIDTH_NORMAL + DEFAULT_PADDING
+			else
+				width = width + BUTTON_WIDTH_SMALL + DEFAULT_PADDING
+			end
+		end
 
-	-- 	-- TODO: Quest -> Container
-	-- 	local anchor = db.questList[slot_number].appearance and db.questList[slot_number].appearance.anchor or "BOTTOMLEFT"
+		frame:SetWidth(questContainerWidth)
 
-	-- 	local horizontal_anchor = string.sub(anchor, -5, -1) == "RIGHT" and "RIGHT" or "LEFT"
-	-- 	local vertical_anchor = string.sub(anchor, 1, 3) == "TOP" and "TOP" or "BOTTOM"
+		return questContainerWidth
+	end
 
-	-- 	-- TODO: Quest -> Container
-	-- 	local x_offset = x or db.questList[slot_number].appearance.x
-	-- 	local y_offset = y or db.questList[slot_number].appearance.y
+	function frame:UpdateFramePosition(x, y)
+		frame:ClearAllPoints()
 
-	-- 	if horizontal_anchor == "RIGHT" then
-	-- 		x_offset = -1 * x_offset
-	-- 	end
+		-- TODO: Quest -> Container
+		if (db.containerList[slot_number].appearance == nil or db.containerList[slot_number].appearance.x == nil or db.containerList[slot_number].appearance.y == nil) and (x == nil or y == nil) then
+			frame:SetPoint("CENTER")
+			return
+		end
 
-	-- 	if vertical_anchor == "TOP" then
-	-- 		y_offset = -1 * y_offset
-	-- 	end
+		-- TODO: Quest -> Container
+		local anchor = db.containerList[slot_number].appearance and db.containerList[slot_number].appearance.anchor or "BOTTOMLEFT"
 
-	-- 	questContainer:SetPoint(anchor, x_offset, y_offset)
-	-- end
+		local horizontal_anchor = string.sub(anchor, -5, -1) == "RIGHT" and "RIGHT" or "LEFT"
+		local vertical_anchor = string.sub(anchor, 1, 3) == "TOP" and "TOP" or "BOTTOM"
 
-	return questContainer
+		-- TODO: Quest -> Container
+		local x_offset = x or db.containerList[slot_number].appearance.x
+		local y_offset = y or db.containerList[slot_number].appearance.y
+
+		if horizontal_anchor == "RIGHT" then
+			x_offset = -1 * x_offset
+		end
+
+		if vertical_anchor == "TOP" then
+			y_offset = -1 * y_offset
+		end
+
+		frame:SetPoint(anchor, x_offset, y_offset)
+	end
+
+	return frame
 end
 
 function DropQuests:ShowQuestFrame(slot_number)
@@ -986,7 +970,7 @@ end
 
 -- Refresh the visibility of all quest frames assuming the designated map ID
 function DropQuests:RefreshQuestFrameVisibility(uiMapID)
-	uiMapID = uiMapID or DropQuests:GetZoneFromMap()
+	uiMapID = uiMapID or MN:GetZoneFromMap(nil, true)
 	if uiMapID == nil then return false end
 
 	for key, quest in pairs(db.questList) do
@@ -997,8 +981,9 @@ function DropQuests:RefreshQuestFrameVisibility(uiMapID)
 	return true
 end
 
----------------------------------------------------------
+----------------------------
 -- Quest Container Functions
+----------------------------
 
 function attachFramesToContainer()
 	setQuestContainerWidth()
@@ -1099,8 +1084,9 @@ function stopMovingQuestContainer()
 	ACR:NotifyChange(addonName)
 end
 
----------------------------------------------------------
+----------------
 -- Options table
+----------------
 
 options = {}
 
@@ -1534,38 +1520,6 @@ quest_template = {
 	childGroups = "tab",
 	order = 100,
 	args = {
-		enabled = {
-			name = L["EnableQuest"],
-			desc = L["EnableQuestTooltip"],
-			width = "half",
-			type = "toggle",
-			order = 20,
-			get = function(info, v)
-				if db.questList[info[2]].enabled ~= nil then
-					return db.questList[info[2]].enabled
-				else
-					return true
-				end
-			end,
-			set = function(info, v)
-				db.questList[info[2]].enabled = v
-
-				DropQuests:GetFrameFromSlot(info[2]):UpdateVisibility()
-
-				if db.appearance and db.appearance.grouped then
-					moveQuestsToContainer()
-				end
-			end,
-		},
-		del_quest = {
-			name = L["DeleteQuest"],
-			desc = L["DeleteQuestTooltip"],
-			type = "execute",
-			order = 40,
-			confirm = function() return true end,
-			confirmText = L["DeleteQuestConfirmDialog"],
-			func = function(info, v) DropQuests:RemoveQuestFromSlot(info[2]) end,
-		},
 		quest_options = {
 			name = L["Quest"],
 			type = "group",
@@ -1576,12 +1530,44 @@ quest_template = {
 					type = "description",
 					order = 0,
 				},
+				enabled = {
+					name = L["EnableQuest"],
+					desc = L["EnableQuestTooltip"],
+					width = "half",
+					type = "toggle",
+					order = 10,
+					get = function(info, v)
+						if db.questList[info[2]].enabled ~= nil then
+							return db.questList[info[2]].enabled
+						else
+							return true
+						end
+					end,
+					set = function(info, v)
+						db.questList[info[2]].enabled = v
+
+						DropQuests:GetFrameFromSlot(info[2]):UpdateVisibility()
+
+						if db.appearance and db.appearance.grouped then
+							moveQuestsToContainer()
+						end
+					end,
+				},
+				del_quest = {
+					name = L["DeleteQuest"],
+					desc = L["DeleteQuestTooltip"],
+					type = "execute",
+					order = 20,
+					confirm = function() return not IsShiftKeyDown() end,
+					confirmText = L["DeleteQuestConfirmDialog"],
+					func = function(info, v) DropQuests:RemoveQuestFromSlot(info[2]) end,
+				},
 				name = {
 					name = L["QuestName"],
 					desc = L["QuestNameTooltip"],
 					width = "full",
 					type = "input",
-					order = 10,
+					order = 30,
 					get = function(info, v)
 						local new_name = DropQuests:GetQuestName(info[2])
 
@@ -1599,12 +1585,38 @@ quest_template = {
 						DropQuests:GetFrameFromSlot(info[2]):UpdateName()
 					end,
 				},
+				action_item = {
+					name = "",
+					desc = L["QuestItemTooltip"],
+					width = 0.25,
+					type = "input",
+					control = "ActionSlot",
+					--disabled = function(info) return DropQuests:GetQuestType(info[2]) ~= "item" end,
+					order = 40,
+					get = function(info)
+						local id = db.questList[info[2]].itemID or 0
+						return DropQuests:GetQuestType(info[2])..":"..id
+					end,
+					set = function(info, v)
+						if v == "" then
+							DropQuests:SetQuestItem(info[2])
+							return
+						end
+
+						local frame = DropQuests:GetFrameFromSlot(info[2])
+
+						DropQuests:SetQuestItem(info[2], v)
+
+						frame:UpdateVisibility()
+						frame:UpdateItem()
+					end,
+				},
 				item = {
 					name = L["QuestItem"],
 					desc = L["QuestItemTooltip"],
 					type = "input",
-					order = 20,
-					get = function(info, v)
+					order = 45,
+					get = function(info)
 						if db.questList[info[2]].itemID ~= nil then
 							if DropQuests:GetQuestType(info[2]) == "currency" then
 								local currencyInfo = C_CurrencyInfo.GetBasicCurrencyInfo(db.questList[info[2]].itemID)
@@ -1664,13 +1676,14 @@ quest_template = {
 				quest_type = {
 					name = L["QuestType"],
 					desc = L["QuestTypeTooltip"],
+					width = 0.75,
 					type = "select",
-					order = 30,
+					order = 50,
 					values = {
 						["item"] = L["QuestItem"],
 						["currency"] = L["QuestCurrency"],
 					},
-					get = function(info) return db.questList[info[2]].quest_type or "item" end,
+					get = function(info) return DropQuests:GetQuestType(info[2]) end,
 					set = function(info, v)
 						db.questList[info[2]].quest_type = v
 						local frame = DropQuests:GetFrameFromSlot(info[2])
@@ -1689,7 +1702,7 @@ quest_template = {
 					name = L["QuestGoal"],
 					desc = L["QuestGoalTooltip"],
 					type = "input",
-					order = 50,
+					order = 60,
 					disabled = function(info) return db.questList[info[2]].use_currency_maximum ~= nil and db.questList[info[2]].use_currency_maximum end,
 					validate = function(info, v)
 						if tonumber(v) == nil then
@@ -1709,8 +1722,8 @@ quest_template = {
 					name = L["UseBank"],
 					desc = L["UseBankTooltip"],
 					type = "toggle",
-					hidden = function(info) return db.questList[info[2]].quest_type ~= nil and db.questList[info[2]].quest_type ~= "item" end,
-					order = 60,
+					hidden = function(info) return DropQuests:GetQuestType(info[2]) ~= "item" end,
+					order = 70,
 					get = function(info)
 						if db.questList[info[2]].use_bank ~= nil then
 							return db.questList[info[2]].use_bank
@@ -1727,8 +1740,8 @@ quest_template = {
 					name = L["UseCurrencyMaximum"],
 					desc = L["UseCurrencyMaximumTooltip"],
 					type = "toggle",
-					hidden = function(info) return db.questList[info[2]].quest_type == nil or db.questList[info[2]].quest_type ~= "currency" end,
-					order = 60,
+					hidden = function(info) return DropQuests:GetQuestType(info[2]) ~= "currency" end,
+					order = 80,
 					get = function(info)
 						if db.questList[info[2]].use_currency_maximum ~= nil then
 							return db.questList[info[2]].use_currency_maximum
@@ -1887,7 +1900,7 @@ quest_template = {
 						if db.questList[info[2]].appearance ~= nil and db.questList[info[2]].appearance.show_name ~= nil then
 							return db.questList[info[2]].appearance.show_name
 						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_name ~= nil then
-                             return db.appearance.defaults.show_name
+							return db.appearance.defaults.show_name
 						end
 						return true
 					end,
@@ -1937,7 +1950,7 @@ quest_template = {
 						if db.questList[info[2]].appearance ~= nil and db.questList[info[2]].appearance.show_value ~= nil then
 							return db.questList[info[2]].appearance.show_value
 						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_maximum ~= nil then
-                             return db.appearance.defaults.show_value
+							 return db.appearance.defaults.show_value
 						end
 						return true
 					end,
@@ -1993,12 +2006,12 @@ quest_template = {
 					width = 0.75,
 					type = "toggle",
 					order = 140,
-                    hidden = function() return db.appearance == nil or db.appearance.grouped end,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 					get = function(info, v)
 						if db.questList[info[2]].appearance ~= nil and db.questList[info[2]].appearance.show_progress_bar ~= nil then
 							return db.questList[info[2]].appearance.show_progress_bar
 						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.show_progress_bar ~= nil then
-                             return db.appearance.defaults.show_progress_bar
+							 return db.appearance.defaults.show_progress_bar
 						end
 						return true
 					end,
@@ -2018,12 +2031,12 @@ quest_template = {
 					order = 150,
 					dialogControl = "LSM30_Statusbar",
 					values = WidgetLists.statusbar,
-                    hidden = function() return db.appearance == nil or db.appearance.grouped end,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 					get = function(info)
 						if db.questList[info[2]].appearance ~= nil and db.questList[info[2]].appearance.progress_bar_texture ~= nil then
 							return db.questList[info[2]].appearance.progress_bar_texture
 						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.progress_bar_texture ~= nil then
-                             return db.appearance.defaults.progress_bar_texture
+							 return db.appearance.defaults.progress_bar_texture
 						end
 						return DEFAULT_PROGRESS_BAR_TEXTURE
 					end,
@@ -2042,12 +2055,12 @@ quest_template = {
 					desc = L["MergeNameProgressTooltip"],
 					type = "toggle",
 					order = 160,
-                    hidden = function() return db.appearance == nil or db.appearance.grouped end,
+					hidden = function() return db.appearance == nil or db.appearance.grouped end,
 					get = function(info, v)
 						if db.questList[info[2]].appearance ~= nil and db.questList[info[2]].appearance.merge_name_progress ~= nil then
 							return db.questList[info[2]].appearance.merge_name_progress
 						elseif db.appearance ~= nil and db.appearance.defaults ~= nil and db.appearance.defaults.merge_name_progress ~= nil then
-                             return db.appearance.defaults.merge_name_progress
+							 return db.appearance.defaults.merge_name_progress
 						end
 						return false
 					end,
@@ -2129,7 +2142,7 @@ quest_template = {
 					order = 0,
 				},
 				filter_continent = {
-					name = L["FilterContinent"],
+					name = L["Continents"],
 					type = "group",
 					width = "half",
 					order = 10,
@@ -2151,23 +2164,6 @@ quest_template = {
 									db.questList[info[2]].filter = {}
 								end
 								db.questList[info[2]].filter.auto_filter_continent = v
-							end,
-						},
-						continent = {
-							name = L["FilterContinent"],
-							width = "full",
-							type = "input",
-							order = 10,
-							multiline = 10,
-							disabled = true,
-							get = function(info, v)
-								local output = ""
-								if db.questList[info[2]].filter ~= nil and db.questList[info[2]].filter.continents ~= nil then
-									for key, continent in pairs(db.questList[info[2]].filter.continents) do
-										if continent then output = output .. C_Map.GetMapInfo(key).name .. "\n" end
-									end
-								end
-								return output
 							end,
 						},
 						continent_filter_type = {
@@ -2196,46 +2192,119 @@ quest_template = {
 								["whitelist"] = L["Whitelist"],
 							},
 						},
+						continent_list = {
+							name = L["Continents"],
+							width = "full",
+							type = "select",
+							control = "MultiSelect",
+							order = 30,
+							values = function(info)
+								local output = {}
+								if db.questList[info[2]].filter ~= nil and db.questList[info[2]].filter.continents ~= nil then
+									for mapId, isFiltered in pairs(db.questList[info[2]].filter.continents) do
+										if isFiltered then output[mapId] = MN:GetMapInfo(mapId).name end
+									end
+								end
+								return output
+							end,
+							get = function(info)
+								return questVars[info[2]].selected
+							end,
+							set = function(info, v)
+								questVars[info[2]].selected = questVars[info[2]].selected == v and nil or v
+							end,
+						},
+						continent_input = {
+							name = L["Continent"],
+							desc = L["FilterContinentInputTooltip"],
+							type = "input",
+							order = 40,
+							get = function(info, v) return "" end,
+							set = function(info, v)
+								if v == "" then
+									return
+								end
+
+								local matches = MN:GetMatchingMapsFromName(v, Enum.UIMapType.Continent,
+																					  Enum.UIMapType.World,
+																					  Enum.UIMapType.Cosmic)
+
+								-- Do not assign a value if there are no matches
+								if matches == nil then
+									return
+								end
+
+								-- Assume the first match is the right one
+								local zoneName = matches[1]
+								local mapId = MapNameIDs[Enum.UIMapType.Continent][zoneName]
+
+								DropQuests:AddContinentToFilterList(info[2], mapId)
+							end,
+						},
 						add_continent = {
 							name = L["FilterContinentAdd"],
 							desc = L["FilterContinentAddTooltip"],
 							width = "half",
 							type = "execute",
-							order = 30,
-							disabled = function(info) return db.questList[info[2]].filter and db.questList[info[2]].filter.continents and db.questList[info[2]].filter.continents[tostring(DropQuests:GetContinentFromMap())] end,
+							order = 50,
+							disabled = function(info) -- Disabled if the current continent is already in the list
+								return db.questList[info[2]].filter
+										and db.questList[info[2]].filter.continents
+										and db.questList[info[2]].filter.continents[tostring(MN:GetContinentFromMap(nil, true))]
+							end,
 							func = function(info, v)
 								DropQuests:AddContinentToFilterList(info[2])
 							end,
 						},
 						del_continent = {
 							name = L["FilterContinentRemove"],
-							desc = L["FilterContinentRemoveTooltip"],
+							desc = function(info) -- Displays the selected or current tooltip depending if a continent is selected
+								return questVars[info[2]].selected
+										and db.questList[info[2]].filter
+										and db.questList[info[2]].filter.continents
+										and db.questList[info[2]].filter.continents[tostring(questVars[info[2]].selected)]
+										and L["FilterContinentRemoveSelectedTooltip"]
+										or L["FilterContinentRemoveTooltip"]
+							end,
 							width = "half",
 							type = "execute",
-							order = 40,
-							disabled = function(info) return db.questList[info[2]].filter == nil or db.questList[info[2]].filter.continents == nil or db.questList[info[2]].filter.continents[tostring(DropQuests:GetContinentFromMap())] ~= true end,
+							order = 60,
+							disabled = function(info) -- Disabled if the current continent is not in the list and there is no selected continent
+								return (db.questList[info[2]].filter == nil
+										or db.questList[info[2]].filter.continents == nil
+										or db.questList[info[2]].filter.continents[tostring(MN:GetContinentFromMap(nil, true))] ~= true)
+										and not (questVars[info[2]].selected
+											and db.questList[info[2]].filter.continents
+											and db.questList[info[2]].filter.continents[tostring(questVars[info[2]].selected)])
+							end,
 							func = function(info, v)
-								local currentMap = DropQuests:GetContinentFromMap()
-								local frame = DropQuests:GetFrameFromSlot(info[2])
-
 								if db.questList[info[2]].filter == nil then
-									return
+									db.questList[info[2]].filter = {}
 								end
 								if db.questList[info[2]].filter.continents == nil then
-									return
+									db.questList[info[2]].filter.continents = {}
 								end
 
-								db.questList[info[2]].filter.continents[tostring(currentMap)] = nil
+								local targetContinent = (questVars[info[2]].selected and 
+														db.questList[info[2]].filter and 
+														db.questList[info[2]].filter.continents and 
+														db.questList[info[2]].filter.continents[tostring(questVars[info[2]].selected)]) and 
+														questVars[info[2]].selected or 
+														MN:GetContinentFromMap(nil, true)
 
-								frame:UpdateVisibility(currentMap)
+								if targetContinent then
+									local frame = DropQuests:GetFrameFromSlot(info[2])
+									questVars[info[2]].selected = nil
+									db.questList[info[2]].filter.continents[tostring(targetContinent)] = nil
+									frame:UpdateVisibility()
+								end
 							end,
 						},
 					},
 				},
 				filter_zone = {
-					name = L["FilterZone"],
+					name = L["Zones"],
 					type = "group",
-					width = "half",
 					order = 20,
 					args = {
 						auto_filter = {
@@ -2255,23 +2324,6 @@ quest_template = {
 									db.questList[info[2]].filter = {}
 								end
 								db.questList[info[2]].filter.auto_filter_zone = v
-							end,
-						},
-						zone = {
-							name = L["FilterZone"],
-							width = "full",
-							type = "input",
-							order = 10,
-							multiline = 10,
-							disabled = true,
-							get = function(info, v)
-								local output = ""
-								if db.questList[info[2]].filter ~= nil and db.questList[info[2]].filter.zones ~= nil then
-									for key, zone in pairs(db.questList[info[2]].filter.zones) do
-										if zone then output = output .. C_Map.GetMapInfo(key).name .. "\n" end
-									end
-								end
-								return output
 							end,
 						},
 						zone_filter_type = {
@@ -2300,37 +2352,116 @@ quest_template = {
 								["whitelist"] = L["Whitelist"],
 							},
 						},
+						zone_list = {
+							name = L["Zones"],
+							width = "full",
+							type = "select",
+							control = "MultiSelect",
+							order = 30,
+							values = function(info)
+								local output = {}
+								if db.questList[info[2]].filter ~= nil and db.questList[info[2]].filter.zones ~= nil then
+									for mapId, isFiltered in pairs(db.questList[info[2]].filter.zones) do
+										if isFiltered then output[mapId] = MN:GetMapInfo(mapId).name end
+									end
+								end
+								return output
+							end,
+							get = function(info)
+								return questVars[info[2]].selected
+							end,
+							set = function(info, v)
+								questVars[info[2]].selected = questVars[info[2]].selected == v and nil or v
+							end,
+						},
+						zone_input = {
+							name = L["Zone"],
+							desc = L["FilterZoneInputTooltip"],
+							type = "input",
+							order = 40,
+							get = function(info, v) return "" end,
+							set = function(info, v)
+								if v == "" then
+									return
+								end
+
+								local matches = MN:GetMatchingMapsFromName(v, Enum.UIMapType.Zone,
+																					  Enum.UIMapType.Dungeon,
+																					  Enum.UIMapType.Micro,
+																					  Enum.UIMapType.Orphan)
+
+								-- Do not assign a value if there are no matches
+								if matches == nil then
+									return
+								end
+
+								-- Assume the first match is the right one
+								local mapId
+								for i, _ in pairs(matches) do
+									mapId = i
+									break
+								end
+
+								DropQuests:AddZoneToFilterList(info[2], mapId)
+							end,
+						},
 						add_zone = {
 							name = L["FilterZoneAdd"],
 							desc = L["FilterZoneAddTooltip"],
 							width = "half",
 							type = "execute",
-							order = 30,
-							disabled = function(info) return db.questList[info[2]].filter and db.questList[info[2]].filter.zones and db.questList[info[2]].filter.zones[tostring(DropQuests:GetZoneFromMap())] end,
+							order = 50,
+							disabled = function(info) -- Disabled if the current zone is already in the list
+								return db.questList[info[2]].filter
+										and db.questList[info[2]].filter.zones
+										and db.questList[info[2]].filter.zones[tostring(MN:GetZoneFromMap(nil, true))]
+							end,
 							func = function(info)
 								DropQuests:AddZoneToFilterList(info[2])
 							end,
 						},
 						del_zone = {
 							name = L["FilterZoneRemove"],
-							desc = L["FilterZoneRemoveTooltip"],
+							desc = function(info) -- Displays the "selected" or "current" tooltip depending if a zone is selected
+								return questVars[info[2]].selected
+										and db.questList[info[2]].filter
+										and db.questList[info[2]].filter.zones
+										and db.questList[info[2]].filter.zones[tostring(questVars[info[2]].selected)]
+										and L["FilterZoneRemoveSelectedTooltip"]
+										or L["FilterZoneRemoveTooltip"] end,
 							width = "half",
 							type = "execute",
-							order = 40,
-							disabled = function(info) return db.questList[info[2]].filter == nil or db.questList[info[2]].filter.zones == nil or db.questList[info[2]].filter.zones[tostring(DropQuests:GetZoneFromMap())] ~= true end,
+							order = 60,
+							disabled = function(info) -- Disabled if the current zone is not in the list and there is no selected zone
+								return (db.questList[info[2]].filter == nil
+										or db.questList[info[2]].filter.zones == nil
+										or db.questList[info[2]].filter.zones[tostring(MN:GetZoneFromMap(nil, true))] ~= true)
+										and not (questVars[info[2]].selected
+											and db.questList[info[2]].filter
+											and db.questList[info[2]].filter.zones
+											and db.questList[info[2]].filter.zones[tostring(questVars[info[2]].selected)])
+							end,
 							func = function(info)
-								local currentMap = DropQuests:GetZoneFromMap()
-								local frame = DropQuests:GetFrameFromSlot(info[2])
-
 								if db.questList[info[2]].filter == nil then
 									db.questList[info[2]].filter = {}
 								end
 								if db.questList[info[2]].filter.zones == nil then
 									db.questList[info[2]].filter.zones = {}
 								end
-								db.questList[info[2]].filter.zones[tostring(currentMap)] = nil
 
-								frame:UpdateVisibility(currentMap)
+								local targetZone = (questVars[info[2]].selected
+													and db.questList[info[2]].filter
+													and db.questList[info[2]].filter.zones
+													and db.questList[info[2]].filter.zones[tostring(questVars[info[2]].selected)])
+													and questVars[info[2]].selected
+													or MN:GetZoneFromMap(nil, true)
+
+								if targetZone then
+									local frame = DropQuests:GetFrameFromSlot(info[2])
+									questVars[info[2]].selected = nil
+									db.questList[info[2]].filter.zones[tostring(targetZone)] = nil
+									frame:UpdateVisibility()
+								end
 							end,
 						},
 					},
@@ -2340,8 +2471,9 @@ quest_template = {
 	},
 }
 
----------------------------------------------------------
--- Addon initialization, enabling and disabling
+------------------
+-- Addon Functions
+------------------
 
 function DropQuests:OnInitialize()
 	-- Set up our database
@@ -2356,6 +2488,10 @@ function DropQuests:OnInitialize()
 	elseif db.version < DB_VERSION then
 		migrate_from = db.version
 		DropQuests:MigrateDB(migrate_from)
+	end
+
+	if next(MapNameIDs) == nil then
+		MapNameIDs = MN:GenerateMapNameTables()
 	end
 
 	questContainer = DropQuests:CreateQuestContainer(0)
@@ -2425,7 +2561,7 @@ function DropQuests:OnProfileChanged(event, database, newProfileKey)
 	ACR:RegisterOptionsTable(addonName, options)
 	ACR:NotifyChange(addonName)
 
-	DropQuests:RefreshQuestFrameVisibility(DropQuests:GetZoneFromMap())
+	DropQuests:RefreshQuestFrameVisibility(MN:GetZoneFromMap(nil, true))
 
 	if db.appearance and db.appearance.grouped then
 		moveQuestsToContainer()
