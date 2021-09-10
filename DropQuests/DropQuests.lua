@@ -260,12 +260,19 @@ function DropQuests:SetQuestItem(slot_number, itemID)
 		return
 	end
 
+	local update_quest_name = db.questList[slot_number].name == nil
+
 	local quest_type = DropQuests:GetQuestType(slot_number)
 
 	db.questList[slot_number].itemID = itemID
 	if quest_type == "item" then
 		db.questList[slot_number].itemIcon = GetItemIcon(itemID)
 	end
+
+	if update_quest_name then
+		DropQuests:UpdateQuestOptionName(slot_number)
+	end
+
 	ACR:NotifyChange(addonName)
 end
 
@@ -274,7 +281,7 @@ function DropQuests:GetQuestType(slot_number)
 end
 
 function DropQuests:GetQuestName(slot_number)
-	local returned_name = db.questList[slot_number].name
+	local returned_name = db.questList[slot_number] and db.questList[slot_number].name or nil
 	if returned_name == nil and db.questList[slot_number].itemID then
 		if DropQuests:GetQuestType(slot_number) == "currency" then
 			local currencyInfo = C_CurrencyInfo.GetBasicCurrencyInfo(db.questList[slot_number].itemID)
@@ -328,21 +335,28 @@ end
 function DropQuests:UpdateQuestSlotOptions(slot_number)
 	options.args.quests.args[slot_number].args.appearance_options.args.x_offset.softMax = math.floor(screenWidth + 0.5)
 	options.args.quests.args[slot_number].args.appearance_options.args.y_offset.softMax = math.floor(screenHeight + 0.5)
+	ACR:NotifyChange(addonName)
 end
 
 function DropQuests:UpdateQuestOptionName(slot_number)
 	local name = DropQuests:GetQuestName(slot_number)
 	if name == nil then
 		local quest_type = DropQuests:GetQuestType(slot_number)
-		if quest_type == "item" then
+		if quest_type == "item" and tonumber(db.questList[slot_number].itemID) then
 			local item = Item:CreateFromItemID(db.questList[slot_number].itemID)
 
 			item:ContinueOnItemLoad(function()
 				options.args.quests.args[slot_number].name = DropQuests:GetQuestName(slot_number) or "Invalid"
+
+				ACR:NotifyChange(addonName)
 			end)
+		else
+			options.args.quests.args[slot_number].name = "New Quest"
+			ACR:NotifyChange(addonName)
 		end
 	else
 		options.args.quests.args[slot_number].name = name
+		ACR:NotifyChange(addonName)
 	end
 end
 
@@ -561,7 +575,7 @@ function DropQuests:CreateQuestFrame(slot_number)
 		local quest_type = DropQuests:GetQuestType(slot_number)
 		local new_name = DropQuests:GetQuestName(slot_number) or ""
 
-		if quest_type == "item" and new_name == "" then
+		if quest_type == "item" and new_name == "" and tonumber(db.questList[slot_number].itemID) then
 			local item = Item:CreateFromItemID(db.questList[slot_number].itemID)
 
 			item:ContinueOnItemLoad(function()
@@ -1584,19 +1598,12 @@ quest_template = {
 					type = "input",
 					order = 30,
 					get = function(info, v)
-						local name = DropQuests:GetQuestName(info[2])
-
-						options.args.quests.args[info[2]].name = name or "New Quest"
-
-						ACR:NotifyChange(addonName)
-						return name or ""
+						return DropQuests:GetQuestName(info[2]) or ""
 					end,
 					set = function(info, v)
 						v = v:gsub("||", "|")
 						db.questList[info[2]].name = v ~= "" and v or nil
-						if v ~= "" then
-							options.args.quests.args[info[2]].name = v
-						end
+						DropQuests:UpdateQuestOptionName(info[2])
 						DropQuests:GetFrameFromSlot(info[2]):UpdateName()
 					end,
 				},
